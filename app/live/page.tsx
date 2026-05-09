@@ -109,6 +109,13 @@ export default function LivePage() {
       if (frameTimerRef.current) window.clearInterval(frameTimerRef.current);
       if (sessionTimerRef.current) window.clearInterval(sessionTimerRef.current);
 
+      // CRITICAL for iOS Safari: create + resume the AudioPlayer synchronously inside the
+      // user-gesture chain (before any await). Once we hit `await fetchEphemeralToken()` the
+      // gesture flag is gone and `new AudioContext()` would start in 'interrupted' state.
+      const player = new AudioPlayer();
+      void player.resume();
+      playerRef.current = player;
+
       try {
         const { token, model } = await fetchEphemeralToken();
         const cfg = MODES[targetMode];
@@ -173,10 +180,8 @@ export default function LivePage() {
         capture.setMuted(muted);
         captureRef.current = capture;
 
-        // Audio player
-        const player = new AudioPlayer();
+        // (player was created above, before the awaits, so iOS Safari keeps it unlocked)
         await player.resume();
-        playerRef.current = player;
 
         // Video frame loop
         frameTimerRef.current = window.setInterval(async () => {

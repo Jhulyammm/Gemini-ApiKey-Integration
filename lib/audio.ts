@@ -2,6 +2,33 @@ export const INPUT_SAMPLE_RATE = 16000;
 export const OUTPUT_SAMPLE_RATE = 24000;
 const CAPTURE_BUFFER_SIZE = 4096;
 
+// Inline AudioWorklet processor — accumulates native-rate frames into 4096-sample chunks
+// and posts them to the main thread. iOS 16+ Safari does NOT reliably fire ScriptProcessorNode's
+// onaudioprocess callback, so AudioWorklet is mandatory on iPhone.
+const CAPTURE_WORKLET_CODE = `
+class CaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = new Float32Array(${CAPTURE_BUFFER_SIZE});
+    this.idx = 0;
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const ch = input[0];
+    for (let i = 0; i < ch.length; i++) {
+      this.buffer[this.idx++] = ch[i];
+      if (this.idx >= this.buffer.length) {
+        this.port.postMessage(this.buffer.slice(0, this.idx));
+        this.idx = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('capture-processor', CaptureProcessor);
+`;
+
 function resampleLinear(
   input: Float32Array,
   fromRate: number,
@@ -44,7 +71,10 @@ export type AudioChunkHandler = (samples: Int16Array, level: number) => void;
 export class AudioCapture {
   private context?: AudioContext;
   private source?: MediaStreamAudioSourceNode;
+  private worklet?: AudioWorkletNode;
   private processor?: ScriptProcessorNode;
+  private silentGain?: GainNode;
+  private workletUrl?: string;
   private stream?: MediaStream;
   private muted = false;
   private readonly onChunk: AudioChunkHandler;
@@ -75,33 +105,80 @@ export class AudioCapture {
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    // Use device's native sample rate; we resample to 16kHz manually
     this.context = new Ctor();
     const nativeRate = this.context.sampleRate;
     console.log(
-      `[audio] native sample rate=${nativeRate} -> resampling to ${INPUT_SAMPLE_RATE}`
+      `[audio] capture native=${nativeRate} -> resampling to ${INPUT_SAMPLE_RATE}`
     );
+
+    if (this.context.state === "suspended") {
+      try {
+        await this.context.resume();
+      } catch {
+        /* noop */
+      }
+    }
+
     this.source = this.context.createMediaStreamSource(this.stream);
+
+    // Try AudioWorklet first (iOS 14.5+, all modern Safari/Chrome).
+    // Fallback to ScriptProcessorNode for older Safari.
+    const supportsWorklet =
+      typeof AudioWorkletNode !== "undefined" && !!this.context.audioWorklet;
+
+    if (supportsWorklet) {
+      try {
+        const blob = new Blob([CAPTURE_WORKLET_CODE], {
+          type: "application/javascript",
+        });
+        this.workletUrl = URL.createObjectURL(blob);
+        await this.context.audioWorklet.addModule(this.workletUrl);
+        this.worklet = new AudioWorkletNode(this.context, "capture-processor");
+        this.worklet.port.onmessage = (e: MessageEvent<Float32Array>) => {
+          if (this.muted) return;
+          this.processChunk(e.data, nativeRate);
+        };
+        this.source.connect(this.worklet);
+        // Terminate the audio graph through a silent gain to keep the worklet alive on iOS.
+        this.silentGain = this.context.createGain();
+        this.silentGain.gain.value = 0;
+        this.worklet.connect(this.silentGain);
+        this.silentGain.connect(this.context.destination);
+        console.log("[audio] capture: AudioWorklet active");
+        return;
+      } catch (err) {
+        console.warn(
+          "[audio] AudioWorklet failed, falling back to ScriptProcessor:",
+          err
+        );
+      }
+    }
+
+    // Fallback path (older Safari only)
     this.processor = this.context.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1);
     this.processor.onaudioprocess = (e) => {
       if (this.muted) return;
-      const float32 = e.inputBuffer.getChannelData(0);
-      const resampled = resampleLinear(float32, nativeRate, INPUT_SAMPLE_RATE);
-      const samples = new Int16Array(resampled.length);
-      let sumSquares = 0;
-      for (let i = 0; i < resampled.length; i++) {
-        const s = Math.max(-1, Math.min(1, resampled[i]));
-        samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        sumSquares += s * s;
-      }
-      const rms = Math.sqrt(sumSquares / resampled.length);
-      this.onChunk(samples, rms);
+      this.processChunk(e.inputBuffer.getChannelData(0), nativeRate);
     };
     this.source.connect(this.processor);
-    const silentGain = this.context.createGain();
-    silentGain.gain.value = 0;
-    this.processor.connect(silentGain);
-    silentGain.connect(this.context.destination);
+    this.silentGain = this.context.createGain();
+    this.silentGain.gain.value = 0;
+    this.processor.connect(this.silentGain);
+    this.silentGain.connect(this.context.destination);
+    console.log("[audio] capture: ScriptProcessor fallback");
+  }
+
+  private processChunk(float32: Float32Array, nativeRate: number) {
+    const resampled = resampleLinear(float32, nativeRate, INPUT_SAMPLE_RATE);
+    const samples = new Int16Array(resampled.length);
+    let sumSquares = 0;
+    for (let i = 0; i < resampled.length; i++) {
+      const s = Math.max(-1, Math.min(1, resampled[i]));
+      samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      sumSquares += s * s;
+    }
+    const rms = Math.sqrt(sumSquares / resampled.length);
+    this.onChunk(samples, rms);
   }
 
   setMuted(muted: boolean) {
@@ -110,15 +187,23 @@ export class AudioCapture {
 
   stop() {
     try {
+      this.worklet?.disconnect();
       this.processor?.disconnect();
       this.source?.disconnect();
+      this.silentGain?.disconnect();
     } catch {
       /* noop */
     }
     this.stream?.getTracks().forEach((t) => t.stop());
+    if (this.workletUrl) {
+      URL.revokeObjectURL(this.workletUrl);
+      this.workletUrl = undefined;
+    }
     this.context?.close();
+    this.worklet = undefined;
     this.processor = undefined;
     this.source = undefined;
+    this.silentGain = undefined;
     this.stream = undefined;
     this.context = undefined;
   }
@@ -126,6 +211,7 @@ export class AudioCapture {
 
 export class AudioPlayer {
   private context: AudioContext;
+  private nativeRate: number;
   private playTime: number;
   private active: AudioBufferSourceNode[] = [];
 
@@ -133,8 +219,16 @@ export class AudioPlayer {
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.context = new Ctor({ sampleRate: OUTPUT_SAMPLE_RATE });
+    // CRITICAL for iOS Safari: do NOT pass an explicit sampleRate. iPhone runs the audio
+    // hardware at its native rate (typically 48000) and `new AudioContext({ sampleRate: 24000 })`
+    // either throws or causes the timeline to drift after the first buffer. We resample
+    // the 24kHz PCM coming from Gemini up to native rate inside enqueue().
+    this.context = new Ctor();
+    this.nativeRate = this.context.sampleRate;
     this.playTime = this.context.currentTime;
+    console.log(
+      `[audio] player native=${this.nativeRate}, source PCM=${OUTPUT_SAMPLE_RATE}`
+    );
   }
 
   async resume() {
@@ -150,9 +244,15 @@ export class AudioPlayer {
 
   enqueue(samples: Int16Array) {
     if (samples.length === 0) return;
-    const buffer = this.context.createBuffer(1, samples.length, OUTPUT_SAMPLE_RATE);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < samples.length; i++) data[i] = samples[i] / 0x8000;
+    // Convert PCM16 -> Float32 -> resample 24kHz -> native if needed
+    const float32 = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 0x8000;
+    const resampled =
+      this.nativeRate === OUTPUT_SAMPLE_RATE
+        ? float32
+        : resampleLinear(float32, OUTPUT_SAMPLE_RATE, this.nativeRate);
+    const buffer = this.context.createBuffer(1, resampled.length, this.nativeRate);
+    buffer.getChannelData(0).set(resampled);
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
