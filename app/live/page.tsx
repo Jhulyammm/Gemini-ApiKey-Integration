@@ -153,13 +153,25 @@ export default function LivePage() {
 
       try {
         const { token, model } = await fetchEphemeralToken();
+        // Time-of-day greeting — feels personal and warm, not like a corporate bot.
+        const hour = new Date().getHours();
+        const tod =
+          hour < 5
+            ? "una linda madrugada"
+            : hour < 12
+              ? "un lindo día"
+              : hour < 19
+                ? "una linda tarde"
+                : "una linda noche";
+        const dynamicKickoff = `Saluda al usuario diciendo exactamente esta frase con voz cálida y empática: "Hola, ¿cómo estás? Que tengas ${tod}. ¿Qué hacemos hoy?". Después escucha qué te dice y reacciona naturalmente. NO añadas más palabras al saludo.`;
+
         const session = new LiveSession(
           {
             token,
             model,
             systemInstruction: ASSISTANT.systemPrompt,
             tools: ASSISTANT.tools,
-            kickoff: ASSISTANT.kickoff,
+            kickoff: dynamicKickoff,
           },
           {
             onOpen: () => {
@@ -527,7 +539,11 @@ export default function LivePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ description }),
         });
-        if (!res.ok) throw new Error(`visual ${res.status}`);
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`[chip] visual ${res.status}:`, body);
+          throw new Error(`visual ${res.status}: ${body.slice(0, 200)}`);
+        }
         const data = (await res.json()) as { mimeType: string; dataBase64: string };
         setVisual({ mimeType: data.mimeType, dataBase64: data.dataBase64, caption });
         speakText(caption);
@@ -563,6 +579,11 @@ export default function LivePage() {
             lng: coords?.coords.longitude,
           }),
         });
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`[chip] nearby ${res.status}:`, body);
+          throw new Error(`nearby ${res.status}: ${body.slice(0, 200)}`);
+        }
         const data = (await res.json()) as { text?: string; error?: string };
         const message = data.text || data.error || "No encontré nada cercano";
         setActionToast(null);
@@ -589,7 +610,11 @@ export default function LivePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64, mimeType: "image/jpeg", label }),
         });
-        if (!res.ok) throw new Error(`memory ${res.status}`);
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`[chip] memory ${res.status}:`, body);
+          throw new Error(`memory ${res.status}: ${body.slice(0, 200)}`);
+        }
         const data = (await res.json()) as { description: string };
         const newMem: Memory = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -616,21 +641,26 @@ export default function LivePage() {
     (chipId: string) => {
       switch (chipId) {
         case "describe": {
-          // Pure voice flow — Gemini just needs to describe the current frame
-          const text = SUGGESTIONS.find((s) => s.id === "describe")?.text;
-          if (text) sessionRef.current?.sendText(text);
+          // Pure voice flow — Gemini describes the current frame via the Live audio path
+          sessionRef.current?.sendText(
+            "Describe brevemente y con detalle lo que ves por la cámara ahora mismo, en una o dos frases."
+          );
           return;
         }
         case "draw":
-          void directVisual(
-            "Horario visual claro y bold para tomar pastillas cada 8 horas, agrupadas por desayuno, comida y cena, con iconos grandes de píldora y reloj. Estilo infografía editorial, paleta de alto contraste para baja visión, fondo oscuro, acentos amarillo. Texto en español.",
-            "Te dibujo el horario de las pastillas"
+          // Delegate to Gemini: it asks the user what to draw, then fires the tool
+          sessionRef.current?.sendText(
+            "El usuario tocó el botón Dibuja. Pregúntale en una sola frase corta y amable QUÉ quiere que le dibujes (por ejemplo: 'claro, ¿qué quieres que te dibuje?'). Cuando te responda, llama a la función generate_visual_aid INMEDIATAMENTE con una descripción detallada en alto contraste y texto en español. NO inventes el dibujo: espera la respuesta del usuario."
           );
           return;
         case "find":
-          void directNearby("farmacia más cercana", "sin pistas visuales claras");
+          sessionRef.current?.sendText(
+            "El usuario tocó el botón Guíame. Pregúntale en una sola frase corta y amable A DÓNDE quiere ir o qué lugar busca. Cuando te responda, llama a la función find_nearby_place INMEDIATAMENTE con su consulta. NO inventes una dirección: espera la respuesta del usuario."
+          );
           return;
         case "remember": {
+          // Capture-and-save IS the natural action of the Recuerda chip — there's
+          // nothing to ask the user, the camera frame and timestamp are the input.
           const time = new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -640,7 +670,7 @@ export default function LivePage() {
         }
       }
     },
-    [directVisual, directNearby, directSaveMemory]
+    [directSaveMemory]
   );
 
   /* ---------- Cleanup ---------- */

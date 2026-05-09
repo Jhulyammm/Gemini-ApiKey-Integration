@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Nano Banana Pro can take 15-30s for a 4K image — Vercel's default 10s timeout
+// kills the function and returns 500. 60s is the max for Vercel Pro plan.
+export const maxDuration = 60;
 
 const IMAGE_MODEL = "gemini-3-pro-image-preview";
 const FALLBACK_IMAGE_MODEL = "gemini-2.5-flash-image-preview";
@@ -57,20 +60,36 @@ ${description}`;
     return null;
   };
 
+  console.log(`[api/visual] start, prompt length=${prompt.length}`);
+  const t0 = Date.now();
   try {
-    let result = await tryGenerate(IMAGE_MODEL);
+    let result: { mimeType: string; dataBase64: string; modelUsed: string } | null = null;
+    try {
+      result = await tryGenerate(IMAGE_MODEL);
+    } catch (primaryErr) {
+      console.warn(
+        `[api/visual] primary ${IMAGE_MODEL} threw:`,
+        primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
+      );
+    }
     if (!result) {
+      console.log(`[api/visual] falling back to ${FALLBACK_IMAGE_MODEL}`);
       result = await tryGenerate(FALLBACK_IMAGE_MODEL);
     }
     if (!result) {
+      console.error("[api/visual] both models returned no image");
       return NextResponse.json(
         { error: "El modelo no devolvió una imagen" },
         { status: 502 }
       );
     }
+    console.log(
+      `[api/visual] ok in ${Date.now() - t0}ms via ${result.modelUsed}, ${result.dataBase64.length}b64`
+    );
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[api/visual] failed in ${Date.now() - t0}ms:`, message);
     return NextResponse.json(
       { error: `No se pudo generar la imagen: ${message}` },
       { status: 500 }

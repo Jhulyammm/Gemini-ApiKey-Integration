@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Pro vision describing a high-res image can take 5-15s.
+export const maxDuration = 60;
 
 // Memory descriptions need detail and accuracy (this is what the user will hear when
 // they review the memory later), so we use a non-Live frontier text+vision model

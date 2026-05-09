@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Search grounding can take 5-15s while the model walks Google results.
+export const maxDuration = 60;
 
 const TEXT_MODEL = "gemini-3-pro-preview";
 const FALLBACK_MODEL = "gemini-2.5-flash";
