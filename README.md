@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 # AccessLens
 
 **Tus ojos, oídos y guía con IA en vivo.**
@@ -38,6 +37,15 @@ npm run dev
 
 Abre `http://localhost:3000` en tu **móvil** (mismo Wi-Fi que tu laptop, o usa `ngrok` para exponer https). El navegador exige HTTPS para `getUserMedia`, así que para pruebas reales en celular conviene desplegar a Vercel o tunelar.
 
+### Verificar acceso a los modelos antes de correr
+
+```bash
+node --env-file=.env.local scripts/check-api-access.mjs
+node --env-file=.env.local scripts/list-models.mjs
+```
+
+El primero prueba los 5 modelos que AccessLens usa. El segundo lista qué modelos Live tiene tu key disponibles en cada API version.
+
 ---
 
 ## Arquitectura
@@ -55,11 +63,15 @@ lib/
 ├─ gemini-live.ts        ← LiveSession wrapper (WebSocket + callbacks)
 ├─ audio.ts              ← AudioCapture 16kHz · AudioPlayer 24kHz · frame JPEG
 └─ modes.ts              ← system prompts + function declarations por modo
+
+scripts/
+├─ check-api-access.mjs  ← probe de los 5 modelos críticos
+└─ list-models.mjs       ← lista modelos Live por API version
 ```
 
 ### Modelos usados
 
-- `gemini-live-2.5-flash-preview` — Live API con `enableAffectiveDialog` y VAD automática.
+- `gemini-3.1-flash-live-preview` — Live API bidireccional (audio + video).
 - `gemini-3-pro-image-preview` (Nano Banana Pro) — generación de imagen 4K con texto legible.
 - `gemini-3-pro-preview` con `googleSearch` tool — orientación con grounding web.
 
@@ -82,8 +94,3 @@ Plan de tareas paralelas en **`TEAM.md`**.
 ## Licencia
 
 MIT.
-=======
-# Gemini-ApiKey-Integration
-How to do a integration with Gemini Api Key and Vibe Coding
-
->>>>>>> Stashed changes
