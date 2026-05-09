@@ -9,7 +9,7 @@ import {
   int16ToBase64,
 } from "@/lib/audio";
 import { LiveSession, fetchEphemeralToken } from "@/lib/gemini-live";
-import { ALL_MODES, MODES, type ModeId } from "@/lib/modes";
+import { ASSISTANT, SUGGESTIONS } from "@/lib/modes";
 import type { FunctionCall } from "@google/genai";
 
 type Status =
@@ -28,8 +28,19 @@ interface VisualOverlay {
   caption: string;
 }
 
+interface Memory {
+  id: string;
+  label: string;
+  description: string;
+  imageBase64: string;
+  mimeType: string;
+  timestamp: number;
+}
+
 const SESSION_LIMIT_SEC = 110;
 const FRAME_INTERVAL_MS = 1000;
+const MEMORIES_KEY = "accesslens:memories";
+const MAX_MEMORIES = 20;
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -40,13 +51,17 @@ function formatTime(s: number) {
 export default function LivePage() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<ModeId>("eyes");
   const [userCaption, setUserCaption] = useState("");
   const [aiCaption, setAiCaption] = useState("");
   const [visual, setVisual] = useState<VisualOverlay | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [memorySaving, setMemorySaving] = useState<{ label: string } | null>(null);
+  const [activeMemory, setActiveMemory] = useState<Memory | null>(null);
+  const [actionToast, setActionToast] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -58,10 +73,7 @@ export default function LivePage() {
   const userBufferRef = useRef("");
   const aiBufferRef = useRef("");
   const captionTimerRef = useRef<number | null>(null);
-  const pendingModeRef = useRef<ModeId | null>(null);
   const reconnectingRef = useRef(false);
-
-  const currentMode = MODES[mode];
 
   /* ---------- Permissions ---------- */
   const requestPermissions = useCallback(async () => {
@@ -94,7 +106,7 @@ export default function LivePage() {
 
   /* ---------- Connect Session ---------- */
   const startSession = useCallback(
-    async (targetMode: ModeId) => {
+    async () => {
       setError(null);
       setStatus("connecting");
       setUserCaption("");
@@ -118,15 +130,13 @@ export default function LivePage() {
 
       try {
         const { token, model } = await fetchEphemeralToken();
-        const cfg = MODES[targetMode];
         const session = new LiveSession(
           {
             token,
             model,
-            systemInstruction: cfg.systemPrompt,
-            tools: cfg.tools,
-            kickoff:
-              "Saluda al usuario en una sola frase corta de 6-8 palabras: 'Hola, soy AccessLens, ¿en qué te ayudo?'",
+            systemInstruction: ASSISTANT.systemPrompt,
+            tools: ASSISTANT.tools,
+            kickoff: ASSISTANT.kickoff,
           },
           {
             onOpen: () => {
@@ -157,8 +167,8 @@ export default function LivePage() {
               playerRef.current?.interrupt();
             },
             onToolCall: (call) => handleToolCall(call),
-            onClose: (reason) => {
-              if (!reconnectingRef.current && pendingModeRef.current === null) {
+            onClose: () => {
+              if (!reconnectingRef.current) {
                 setStatus("ended");
               }
             },
@@ -198,7 +208,7 @@ export default function LivePage() {
           setElapsed((prev) => {
             const next = prev + 1;
             if (next >= SESSION_LIMIT_SEC) {
-              triggerReconnect(targetMode);
+              triggerReconnect();
             }
             return next;
           });
@@ -213,11 +223,112 @@ export default function LivePage() {
     [muted]
   );
 
+  /* ---------- Memorias persistence ---------- */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MEMORIES_KEY);
+      if (raw) setMemories(JSON.parse(raw));
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }, []);
+
+  const persistMemories = useCallback((next: Memory[]) => {
+    setMemories(next);
+    try {
+      localStorage.setItem(MEMORIES_KEY, JSON.stringify(next));
+    } catch {
+      /* quota exceeded — silently drop */
+    }
+  }, []);
+
+  const deleteMemory = useCallback(
+    (id: string) => {
+      persistMemories(memories.filter((m) => m.id !== id));
+      if (activeMemory?.id === id) setActiveMemory(null);
+    },
+    [memories, persistMemories, activeMemory]
+  );
+
+  const speakMemory = useCallback((memory: Memory) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(memory.description);
+    utter.lang = "es-ES";
+    utter.rate = 0.95;
+    window.speechSynthesis.speak(utter);
+  }, []);
+
+  /* ---------- dispatch_action handler ---------- */
+  const runAction = useCallback(
+    (
+      action: string,
+      phone: string,
+      message: string,
+      delayMinutes: number
+    ): { ok: boolean; detail: string } => {
+      const phoneClean = phone.replace(/[^+\d]/g, "");
+      if (action === "call" && phoneClean) {
+        window.location.href = `tel:${phoneClean}`;
+        setActionToast(`Abriendo marcador → ${phoneClean}`);
+        return { ok: true, detail: "Marcador abierto" };
+      }
+      if (action === "sms" && phoneClean) {
+        const body = encodeURIComponent(message);
+        window.location.href = `sms:${phoneClean}${body ? `?body=${body}` : ""}`;
+        setActionToast(`Abriendo SMS → ${phoneClean}`);
+        return { ok: true, detail: "App de SMS abierta" };
+      }
+      if (action === "alarm" && delayMinutes > 0) {
+        const ms = delayMinutes * 60 * 1000;
+        const fireAlarm = () => {
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("AccessLens — recordatorio", {
+              body: message || "Es hora",
+            });
+          } else {
+            alert(`AccessLens recordatorio: ${message || "Es hora"}`);
+          }
+        };
+        if ("Notification" in window && Notification.permission !== "granted") {
+          Notification.requestPermission().then(() => {
+            window.setTimeout(fireAlarm, ms);
+          });
+        } else {
+          window.setTimeout(fireAlarm, ms);
+        }
+        setActionToast(`Alarma programada en ${delayMinutes} min`);
+        return { ok: true, detail: `Alarma en ${delayMinutes} min` };
+      }
+      if (action === "share") {
+        const shareData: ShareData = {
+          title: "AccessLens",
+          text: message || "Comparto desde AccessLens",
+        };
+        if (navigator.share) {
+          navigator.share(shareData).catch(() => undefined);
+          setActionToast("Compartiendo…");
+          return { ok: true, detail: "Diálogo de compartir abierto" };
+        }
+        return { ok: false, detail: "Este navegador no soporta compartir" };
+      }
+      return { ok: false, detail: "Acción no soportada o parámetros faltantes" };
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!actionToast) return;
+    const t = window.setTimeout(() => setActionToast(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [actionToast]);
+
   /* ---------- Tool calls ---------- */
   const handleToolCall = useCallback(async (call: FunctionCall) => {
     const id = call.id ?? "";
     const name = call.name ?? "";
     const args = (call.args ?? {}) as Record<string, unknown>;
+    console.log(`%c[tool] ${name}`, "color:#ffe600;font-weight:bold", args);
 
     if (name === "generate_visual_aid") {
       const description = String(args.description ?? "");
@@ -228,14 +339,20 @@ export default function LivePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ description }),
         });
-        if (!res.ok) throw new Error(`visual ${res.status}`);
+        if (!res.ok) {
+          const err = await res.text();
+          console.error(`[tool] visual endpoint ${res.status}: ${err}`);
+          throw new Error(`visual ${res.status}`);
+        }
         const data = (await res.json()) as { mimeType: string; dataBase64: string };
+        console.log(`[tool] visual generated, mimeType=${data.mimeType}, size=${data.dataBase64.length}b64`);
         setVisual({ mimeType: data.mimeType, dataBase64: data.dataBase64, caption });
         sessionRef.current?.sendToolResponse(id, name, {
           status: "ok",
-          message: "Imagen generada y mostrada al usuario.",
+          message: "Imagen generada y mostrada al usuario en pantalla.",
         });
       } catch (e) {
+        console.error("[tool] visual failed:", e);
         sessionRef.current?.sendToolResponse(id, name, {
           status: "error",
           message: e instanceof Error ? e.message : "fallo",
@@ -265,46 +382,104 @@ export default function LivePage() {
           }),
         });
         const data = (await res.json()) as { text?: string; error?: string };
+        console.log(
+          `[tool] nearby ${res.status}, gps=${coords ? "yes" : "no"}, response="${(data.text ?? data.error ?? "").slice(0, 80)}…"`
+        );
         sessionRef.current?.sendToolResponse(id, name, {
           status: res.ok ? "ok" : "error",
           guidance: data.text ?? data.error ?? "",
         });
       } catch (e) {
+        console.error("[tool] nearby failed:", e);
         sessionRef.current?.sendToolResponse(id, name, {
           status: "error",
           guidance: e instanceof Error ? e.message : "fallo",
         });
       }
+      return;
     }
-  }, []);
+
+    if (name === "save_memory") {
+      const label = String(args.label ?? "Memoria sin título");
+      setMemorySaving({ label });
+      try {
+        const v = videoRef.current;
+        if (!v) throw new Error("Sin acceso a cámara");
+        const imageBase64 = await captureFrameJpegBase64(v, 1280, 0.85);
+        if (!imageBase64) throw new Error("No se pudo capturar frame");
+
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64,
+            mimeType: "image/jpeg",
+            label,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          console.error(`[tool] memory endpoint ${res.status}: ${err}`);
+          throw new Error(`memory ${res.status}`);
+        }
+        const data = (await res.json()) as { description: string };
+        const newMem: Memory = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          label,
+          description: data.description,
+          imageBase64,
+          mimeType: "image/jpeg",
+          timestamp: Date.now(),
+        };
+        const next = [newMem, ...memories].slice(0, MAX_MEMORIES);
+        persistMemories(next);
+        console.log(`[tool] memory saved: "${label}", ${data.description.length} chars`);
+        sessionRef.current?.sendToolResponse(id, name, {
+          status: "ok",
+          message: `Memoria "${label}" guardada con descripción detallada.`,
+        });
+      } catch (e) {
+        console.error("[tool] save_memory failed:", e);
+        sessionRef.current?.sendToolResponse(id, name, {
+          status: "error",
+          message: e instanceof Error ? e.message : "fallo",
+        });
+      } finally {
+        setMemorySaving(null);
+      }
+      return;
+    }
+
+    if (name === "dispatch_action") {
+      const action = String(args.action ?? "").toLowerCase();
+      const phone = String(args.phone ?? "");
+      const message = String(args.message ?? "");
+      const delayMinutes = Number(args.delayMinutes ?? 0);
+      const result = runAction(action, phone, message, delayMinutes);
+      console.log(`[tool] dispatch_action ${action}: ${result.detail}`);
+      sessionRef.current?.sendToolResponse(id, name, {
+        status: result.ok ? "ok" : "error",
+        message: result.detail,
+      });
+      return;
+    }
+  }, [memories, persistMemories, runAction]);
 
   /* ---------- Reconnect (session 2-min limit) ---------- */
-  const triggerReconnect = useCallback(
-    (targetMode: ModeId) => {
-      if (reconnectingRef.current) return;
-      reconnectingRef.current = true;
-      setStatus("reconnecting");
-      setTimeout(async () => {
-        await startSession(targetMode);
-        reconnectingRef.current = false;
-      }, 200);
-    },
-    [startSession]
-  );
+  const triggerReconnect = useCallback(() => {
+    if (reconnectingRef.current) return;
+    reconnectingRef.current = true;
+    setStatus("reconnecting");
+    setTimeout(async () => {
+      await startSession();
+      reconnectingRef.current = false;
+    }, 200);
+  }, [startSession]);
 
-  /* ---------- Mode switch ---------- */
-  const switchMode = useCallback(
-    async (next: ModeId) => {
-      if (next === mode && status === "live") return;
-      pendingModeRef.current = next;
-      setMode(next);
-      if (status === "live" || status === "connecting" || status === "reconnecting") {
-        await startSession(next);
-      }
-      pendingModeRef.current = null;
-    },
-    [mode, status, startSession]
-  );
+  /* ---------- Suggestion chip ---------- */
+  const sendSuggestion = useCallback((text: string) => {
+    sessionRef.current?.sendText(text);
+  }, []);
 
   /* ---------- Cleanup ---------- */
   const stopAll = useCallback(() => {
@@ -390,17 +565,15 @@ export default function LivePage() {
           </span>
         </Link>
 
-        <div className="flex flex-col items-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/60">
-            mode
+        <button
+          onClick={() => setMemoriesOpen(true)}
+          className="hairline-strong flex h-9 items-center gap-2 bg-black/50 px-3 backdrop-blur"
+        >
+          <span className="font-mono text-sm">💾</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/80">
+            memorias{memories.length > 0 ? ` · ${memories.length}` : ""}
           </span>
-          <div className="mt-1 flex items-center gap-2 bg-[var(--signal)] px-3 py-1 text-[var(--signal-ink)]">
-            <span className="text-base">{currentMode.emoji}</span>
-            <span className="font-display text-sm font-bold uppercase tracking-wider">
-              {currentMode.label}
-            </span>
-          </div>
-        </div>
+        </button>
 
         <div className="flex flex-col items-end">
           <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/60">
@@ -427,12 +600,12 @@ export default function LivePage() {
           </div>
           <h2 className="reveal reveal-2 max-w-md text-center font-display text-4xl font-black leading-tight tracking-tight">
             {status === "ready"
-              ? "Listo. Elige un modo y arranca."
+              ? "Todo listo. Habla y AccessLens responde."
               : "Activa cámara y micrófono"}
           </h2>
           <p className="reveal reveal-3 mt-4 max-w-md text-center text-white/70">
             {status === "ready"
-              ? "AccessLens verá lo mismo que tú y te hablará con voz natural."
+              ? "Pídele que describa, lea, dibuje, te lleve a un lugar, guarde una memoria o llame a alguien."
               : "AccessLens necesita ver y oír para asistirte. Tus datos no se guardan."}
           </p>
 
@@ -451,7 +624,7 @@ export default function LivePage() {
             )}
             {status === "ready" && (
               <button
-                onClick={() => startSession(mode)}
+                onClick={() => startSession()}
                 className="flex h-14 items-center justify-between bg-[var(--signal)] px-5 text-[var(--signal-ink)]"
               >
                 <span className="font-display text-lg font-bold">
@@ -487,7 +660,7 @@ export default function LivePage() {
               {error ?? "Algo salió mal"}
             </p>
             <button
-              onClick={() => startSession(mode)}
+              onClick={() => startSession()}
               className="mt-5 flex h-12 w-full items-center justify-center bg-[var(--signal)] font-bold text-[var(--signal-ink)]"
             >
               Reintentar
@@ -567,34 +740,21 @@ export default function LivePage() {
           </button>
         </div>
 
-        {/* Mode chips */}
+        {/* Suggestion chips — tap = sends text to model as if user spoke it */}
         <div className="grid grid-cols-4 gap-2">
-          {ALL_MODES.map((m) => {
-            const active = m.id === mode;
-            return (
-              <button
-                key={m.id}
-                onClick={() => switchMode(m.id)}
-                className={`group relative flex flex-col items-center justify-center border px-2 py-3 text-center transition ${
-                  active
-                    ? "border-[var(--signal)] bg-[var(--signal)] text-[var(--signal-ink)]"
-                    : "border-[var(--hairline-strong)] bg-black/55 text-white backdrop-blur"
-                }`}
-              >
-                <span className="text-2xl leading-none">{m.emoji}</span>
-                <span className="mt-1 font-display text-[12px] font-bold uppercase tracking-wider">
-                  {m.label}
-                </span>
-                <span
-                  className={`mt-0.5 hidden font-mono text-[9px] uppercase tracking-[0.18em] ${
-                    active ? "text-[var(--signal-ink)]/80" : "text-white/55"
-                  } sm:block`}
-                >
-                  0{ALL_MODES.indexOf(m) + 1}
-                </span>
-              </button>
-            );
-          })}
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s.id}
+              disabled={!isLive}
+              onClick={() => sendSuggestion(s.text)}
+              className="group relative flex flex-col items-center justify-center border border-[var(--hairline-strong)] bg-black/55 px-2 py-3 text-center text-white backdrop-blur transition disabled:opacity-40 hover:border-[var(--signal)] active:bg-[var(--signal)] active:text-[var(--signal-ink)]"
+            >
+              <span className="text-2xl leading-none">{s.emoji}</span>
+              <span className="mt-1 font-display text-[11px] font-bold uppercase tracking-wider">
+                {s.label}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Stop button (only when live) */}
@@ -610,6 +770,153 @@ export default function LivePage() {
           </button>
         )}
       </footer>
+
+      {/* Memory saving toast */}
+      {memorySaving && (
+        <div className="pointer-events-none absolute inset-x-0 top-24 z-30 flex justify-center px-6">
+          <div className="hairline-strong flex items-center gap-3 bg-black/85 px-4 py-2 backdrop-blur">
+            <span className="relative inline-block h-2 w-2 rounded-full bg-[var(--signal)] pulse-ring" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-white">
+              guardando memoria · {memorySaving.label}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Action dispatcher toast */}
+      {actionToast && (
+        <div className="pointer-events-none absolute inset-x-0 top-36 z-30 flex justify-center px-6">
+          <div className="hairline-strong flex items-center gap-2 bg-[var(--signal)] px-4 py-2 text-[var(--signal-ink)]">
+            <span className="font-mono text-xs">▶</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.28em] font-bold">
+              {actionToast}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Memorias overlay */}
+      {memoriesOpen && (
+        <div className="absolute inset-0 z-50 flex flex-col bg-black">
+          <header className="flex items-center justify-between border-b border-[var(--hairline-strong)] px-5 py-5">
+            <button
+              onClick={() => {
+                setMemoriesOpen(false);
+                setActiveMemory(null);
+                if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+              }}
+              className="hairline-strong flex h-9 items-center gap-2 px-3"
+            >
+              <span className="font-mono text-sm">←</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.32em]">
+                volver
+              </span>
+            </button>
+            <div className="text-center">
+              <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/60">
+                galería
+              </span>
+              <h2 className="font-display text-xl font-black uppercase tracking-tight">
+                Mis memorias
+              </h2>
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/60">
+              {memories.length} / {MAX_MEMORIES}
+            </span>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-4 py-5">
+            {memories.length === 0 && (
+              <div className="flex h-full flex-col items-center justify-center px-8 text-center text-white/55">
+                <span className="text-5xl">💾</span>
+                <p className="mt-4 max-w-xs font-display text-lg leading-tight">
+                  Aún no tienes memorias. Apunta la cámara a algo importante y di
+                  &quot;guarda esto&quot;.
+                </p>
+              </div>
+            )}
+
+            {memories.length > 0 && !activeMemory && (
+              <div className="grid grid-cols-2 gap-3">
+                {memories.map((m) => {
+                  const date = new Date(m.timestamp);
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setActiveMemory(m);
+                        speakMemory(m);
+                      }}
+                      className="group relative flex flex-col overflow-hidden border border-[var(--hairline-strong)] bg-black text-left transition hover:border-[var(--signal)]"
+                    >
+                      <div className="aspect-square w-full overflow-hidden bg-black">
+                        <img
+                          src={`data:${m.mimeType};base64,${m.imageBase64}`}
+                          alt={m.label}
+                          className="block h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="px-3 py-2">
+                        <p className="font-display text-[13px] font-bold leading-tight line-clamp-2">
+                          {m.label}
+                        </p>
+                        <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-white/50">
+                          {date.toLocaleDateString()} · {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeMemory && (
+              <div className="mx-auto max-w-md">
+                <button
+                  onClick={() => {
+                    setActiveMemory(null);
+                    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+                  }}
+                  className="mb-4 font-mono text-[10px] uppercase tracking-[0.32em] text-white/70"
+                >
+                  ← todas las memorias
+                </button>
+                <div className="hairline-strong overflow-hidden bg-black">
+                  <img
+                    src={`data:${activeMemory.mimeType};base64,${activeMemory.imageBase64}`}
+                    alt={activeMemory.label}
+                    className="block w-full"
+                  />
+                </div>
+                <h3 className="mt-5 font-display text-2xl font-black leading-tight">
+                  {activeMemory.label}
+                </h3>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.28em] text-white/60">
+                  {new Date(activeMemory.timestamp).toLocaleString()}
+                </p>
+                <p className="mt-4 text-base leading-relaxed text-white/90">
+                  {activeMemory.description}
+                </p>
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={() => speakMemory(activeMemory)}
+                    className="flex h-12 flex-1 items-center justify-center gap-2 bg-[var(--signal)] font-display font-bold text-[var(--signal-ink)]"
+                  >
+                    <span className="font-mono">▶</span> Reescuchar
+                  </button>
+                  <button
+                    onClick={() => deleteMemory(activeMemory.id)}
+                    className="hairline-strong flex h-12 w-12 items-center justify-center text-[var(--warn)]"
+                    aria-label="Eliminar memoria"
+                  >
+                    <span className="font-mono">✕</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
