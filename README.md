@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # AccessLens
 
 **Tus ojos, oídos y guía con IA en vivo.**
@@ -81,3 +82,8 @@ Plan de tareas paralelas en **`TEAM.md`**.
 ## Licencia
 
 MIT.
+=======
+# Gemini-ApiKey-Integration
+How to do a integration with Gemini Api Key and Vibe Coding
+
+>>>>>>> Stashed changes
