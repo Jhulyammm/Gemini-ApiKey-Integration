@@ -7,7 +7,6 @@ import {
   IconBookmark,
   IconBookmarkPlus,
   IconCameraRotate,
-  IconCircleCheck,
   IconMicrophone,
   IconMicrophoneOff,
   IconPlayerPlayFilled,
@@ -16,7 +15,6 @@ import {
   IconSettings,
   IconSparkles,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import {
   AudioCapture,
@@ -39,12 +37,6 @@ type Status =
   | "ended"
   | "error";
 
-interface VisualOverlay {
-  mimeType: string;
-  dataBase64: string;
-  caption: string;
-}
-
 interface Memory {
   id: string;
   label: string;
@@ -54,7 +46,9 @@ interface Memory {
   timestamp: number;
 }
 
-const SESSION_LIMIT_SEC = 110;
+// Failsafe — if the server doesn't send a goAway by this point we force a
+// preemptive reconnect ourselves, just shy of the API's 120s hard limit.
+const SESSION_FAILSAFE_SEC = 115;
 const FRAME_INTERVAL_MS = 1000;
 const MEMORIES_KEY = "accesslens:memories"; // keep key for back-compat with existing memories
 const MAX_MEMORIES = 20;
@@ -64,10 +58,10 @@ const MAX_MEMORIES = 20;
 const VOICE_HINTS = [
   "“describe lo que veo”",
   "“lee este menú”",
+  "“traduce este letrero”",
+  "“qué significa esto”",
   "“guarda esto en memorias”",
   "“dónde queda la farmacia”",
-  "“llama a mi hijo Juan”",
-  "“recuérdame en 8 horas tomar la pastilla”",
 ];
 
 function formatTime(s: number) {
@@ -81,15 +75,12 @@ export default function LivePage() {
   const [error, setError] = useState<string | null>(null);
   const [userCaption, setUserCaption] = useState("");
   const [aiCaption, setAiCaption] = useState("");
-  const [visual, setVisual] = useState<VisualOverlay | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
   const [muted, setMuted] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [memorySaving, setMemorySaving] = useState<{ label: string } | null>(null);
   const [activeMemory, setActiveMemory] = useState<Memory | null>(null);
-  const [actionToast, setActionToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [hintIndex, setHintIndex] = useState(0);
@@ -105,6 +96,16 @@ export default function LivePage() {
   const aiBufferRef = useRef("");
   const captionTimerRef = useRef<number | null>(null);
   const reconnectingRef = useRef(false);
+  // Per-current-session elapsed seconds — used only for the failsafe reconnect
+  // trigger. Not displayed (we show totalElapsed instead).
+  const elapsedRef = useRef(0);
+  // Latest resumable handle from the server. Persisted across reconnects so
+  // the session continues seamlessly past the 2-min underlying-WS hard limit.
+  const resumeHandleRef = useRef<string | undefined>(undefined);
+  // Total elapsed seconds across ALL underlying sessions in this run. The
+  // user perceives one continuous conversation; this is the number we show.
+  const [totalElapsed, setTotalElapsed] = useState(0);
+  const totalElapsedRef = useRef(0);
 
   /* ---------- Hint rotator ---------- */
   useEffect(() => {
@@ -257,57 +258,6 @@ export default function LivePage() {
     }
   }, [memories, persistMemories, speakText]);
 
-  /* ---------- Action toast auto-dismiss ---------- */
-  useEffect(() => {
-    if (!actionToast) return;
-    const t = window.setTimeout(() => setActionToast(null), 3000);
-    return () => window.clearTimeout(t);
-  }, [actionToast]);
-
-  /* ---------- runAction ---------- */
-  const runAction = useCallback(
-    (action: string, phone: string, message: string, delayMinutes: number) => {
-      const phoneClean = phone.replace(/[^+\d]/g, "");
-      if (action === "call" && phoneClean) {
-        window.location.href = `tel:${phoneClean}`;
-        setActionToast(`Marcador → ${phoneClean}`);
-        return { ok: true, detail: "Marcador abierto" };
-      }
-      if (action === "sms" && phoneClean) {
-        const body = encodeURIComponent(message);
-        window.location.href = `sms:${phoneClean}${body ? `?body=${body}` : ""}`;
-        setActionToast(`SMS → ${phoneClean}`);
-        return { ok: true, detail: "SMS abierto" };
-      }
-      if (action === "alarm" && delayMinutes > 0) {
-        const ms = delayMinutes * 60 * 1000;
-        const fire = () => {
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("Sens — recordatorio", { body: message || "Es hora" });
-          } else {
-            alert(`Sens recordatorio: ${message || "Es hora"}`);
-          }
-        };
-        if ("Notification" in window && Notification.permission !== "granted") {
-          Notification.requestPermission().then(() => window.setTimeout(fire, ms));
-        } else {
-          window.setTimeout(fire, ms);
-        }
-        setActionToast(`Alarma en ${delayMinutes} min`);
-        return { ok: true, detail: `Alarma en ${delayMinutes} min` };
-      }
-      if (action === "share" && navigator.share) {
-        navigator
-          .share({ title: "Sens", text: message || "Compartido desde Sens" })
-          .catch(() => undefined);
-        setActionToast("Compartiendo…");
-        return { ok: true, detail: "Diálogo abierto" };
-      }
-      return { ok: false, detail: "Acción no soportada" };
-    },
-    []
-  );
-
   /* ---------- Tool calls ---------- */
   const handleToolCall = useCallback(
     async (call: FunctionCall) => {
@@ -315,53 +265,6 @@ export default function LivePage() {
       const name = call.name ?? "";
       const args = (call.args ?? {}) as Record<string, unknown>;
       console.log(`%c[tool] ${name}`, "color:#60a5fa;font-weight:bold", args);
-
-      if (name === "generate_visual_aid") {
-        const description = String(args.description ?? "");
-        const caption = String(args.caption ?? "");
-        try {
-          const res = await fetch("/api/visual", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ description }),
-          });
-          if (!res.ok) {
-            const body = await res.text();
-            try {
-              const parsed = JSON.parse(body) as {
-                error?: string;
-                needsBilling?: boolean;
-              };
-              if (parsed.needsBilling) {
-                speakText(
-                  "Para dibujar imágenes necesitas activar facturación en tu API key de Google."
-                );
-                sessionRef.current?.sendToolResponse(id, name, {
-                  status: "error",
-                  message: "API key sin billing",
-                });
-                return;
-              }
-              throw new Error(parsed.error ?? `visual ${res.status}`);
-            } catch {
-              throw new Error(`visual ${res.status}`);
-            }
-          }
-          const data = (await res.json()) as { mimeType: string; dataBase64: string };
-          setVisual({ mimeType: data.mimeType, dataBase64: data.dataBase64, caption });
-          sessionRef.current?.sendToolResponse(id, name, {
-            status: "ok",
-            message: "Imagen mostrada en pantalla.",
-          });
-        } catch (e) {
-          console.error("[tool] visual failed:", e);
-          sessionRef.current?.sendToolResponse(id, name, {
-            status: "error",
-            message: e instanceof Error ? e.message : "fallo",
-          });
-        }
-        return;
-      }
 
       if (name === "find_nearby_place") {
         try {
@@ -436,32 +339,32 @@ export default function LivePage() {
         return;
       }
 
-      if (name === "dispatch_action") {
-        const action = String(args.action ?? "").toLowerCase();
-        const phone = String(args.phone ?? "");
-        const message = String(args.message ?? "");
-        const delayMinutes = Number(args.delayMinutes ?? 0);
-        const result = runAction(action, phone, message, delayMinutes);
-        sessionRef.current?.sendToolResponse(id, name, {
-          status: result.ok ? "ok" : "error",
-          message: result.detail,
-        });
-        return;
-      }
     },
-    [memories, persistMemories, runAction, speakText]
+    [memories, persistMemories]
   );
 
   /* ---------- Connect Session ---------- */
   const startSession = useCallback(
-    async () => {
+    async (opts?: { resume?: boolean }) => {
+      const isResume = opts?.resume === true;
       setError(null);
-      setStatus("connecting");
-      setUserCaption("");
-      setAiCaption("");
-      userBufferRef.current = "";
-      aiBufferRef.current = "";
+      // On resume, keep status="live" so the UI doesn't blink. On fresh start,
+      // show the connecting overlay.
+      if (!isResume) {
+        setStatus("connecting");
+        setUserCaption("");
+        setAiCaption("");
+        userBufferRef.current = "";
+        aiBufferRef.current = "";
+        totalElapsedRef.current = 0;
+        setTotalElapsed(0);
+        resumeHandleRef.current = undefined;
+      }
 
+      // Tear down the OLD session/capture/player ONLY after the new session
+      // has connected — but tearing down before reconnect is simpler and the
+      // gap is tens of milliseconds. For now use the simple sequence; if the
+      // perceived gap is annoying we can do hot-swap later.
       sessionRef.current?.close();
       captureRef.current?.stop();
       playerRef.current?.close();
@@ -493,11 +396,15 @@ export default function LivePage() {
             systemInstruction: ASSISTANT.systemPrompt,
             tools: ASSISTANT.tools,
             kickoff: dynamicKickoff,
+            // When resuming, pass the prior handle so the server restores
+            // conversation state. The kickoff is suppressed inside LiveSession
+            // when resumeHandle is present, so the user doesn't get re-greeted.
+            resumeHandle: isResume ? resumeHandleRef.current : undefined,
           },
           {
             onOpen: () => {
               setStatus("live");
-              setElapsed(0);
+              elapsedRef.current = 0;
             },
             onAudio: (b64) => playerRef.current?.enqueueBase64(b64),
             onInputTranscription: (text) => {
@@ -519,6 +426,17 @@ export default function LivePage() {
             },
             onInterrupted: () => playerRef.current?.interrupt(),
             onToolCall: (call) => handleToolCall(call),
+            onResumeHandleUpdate: (handle) => {
+              resumeHandleRef.current = handle;
+            },
+            onGoAway: (timeLeftSec) => {
+              // Server tells us the WS will die in `timeLeftSec`. Spin up a
+              // resumed session NOW so the user never feels the cut.
+              console.log(
+                `[live] goAway received (${timeLeftSec}s) — preempting with resume`
+              );
+              if (resumeHandleRef.current) triggerReconnect();
+            },
             onClose: () => {
               if (!reconnectingRef.current) setStatus("ended");
             },
@@ -549,11 +467,17 @@ export default function LivePage() {
         }, FRAME_INTERVAL_MS);
 
         sessionTimerRef.current = window.setInterval(() => {
-          setElapsed((prev) => {
-            const next = prev + 1;
-            if (next >= SESSION_LIMIT_SEC) triggerReconnect();
-            return next;
-          });
+          elapsedRef.current += 1;
+          // Failsafe: if the server hasn't fired goAway by now, force a
+          // resumed reconnect ourselves before the 120s hard limit.
+          if (
+            elapsedRef.current >= SESSION_FAILSAFE_SEC &&
+            resumeHandleRef.current
+          ) {
+            triggerReconnect();
+          }
+          totalElapsedRef.current += 1;
+          setTotalElapsed(totalElapsedRef.current);
         }, 1000);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -568,11 +492,11 @@ export default function LivePage() {
   const triggerReconnect = useCallback(() => {
     if (reconnectingRef.current) return;
     reconnectingRef.current = true;
-    setStatus("reconnecting");
+    // Don't change status — we want a transparent swap, not a connecting overlay
     setTimeout(async () => {
-      await startSession();
+      await startSession({ resume: true });
       reconnectingRef.current = false;
-    }, 200);
+    }, 50);
   }, [startSession]);
 
   /* ---------- Cleanup ---------- */
@@ -607,7 +531,7 @@ export default function LivePage() {
   }, [muted]);
 
   const isLive = status === "live" || status === "reconnecting";
-  const showHints = isLive && !userCaption && !aiCaption && !visual;
+  const showHints = isLive && !userCaption && !aiCaption;
 
   /* ---------- Voice wave bars (responsive count) ---------- */
   const renderVoiceBars = (count = 12) => {
@@ -671,7 +595,7 @@ export default function LivePage() {
             <span className="corner-guide br" />
 
             {/* Center focus circle */}
-            {isLive && !aiCaption && !userCaption && !visual && (
+            {isLive && !aiCaption && !userCaption && (
               <span className="focus-circle" />
             )}
 
@@ -764,7 +688,7 @@ export default function LivePage() {
           </span>
           {isLive && (
             <span className="hidden font-mono text-[10px] tabular-nums text-white/55 md:inline">
-              {formatTime(Math.min(elapsed, SESSION_LIMIT_SEC))}
+              {formatTime(totalElapsed)}
             </span>
           )}
           <button
@@ -777,15 +701,12 @@ export default function LivePage() {
         </div>
       </header>
 
-      {/* === Mobile session timer === */}
+      {/* === Mobile session timer (counts up indefinitely; reconnects are
+            transparent under the hood) === */}
       {isLive && (
         <div className="pointer-events-none absolute right-4 top-[60px] z-15 md:hidden">
-          <span
-            className={`font-mono text-[10px] tabular-nums ${
-              elapsed > SESSION_LIMIT_SEC - 15 ? "text-[var(--warn)]" : "text-white/55"
-            }`}
-          >
-            {formatTime(Math.min(elapsed, SESSION_LIMIT_SEC))}
+          <span className="font-mono text-[10px] tabular-nums text-white/55">
+            {formatTime(totalElapsed)}
           </span>
         </div>
       )}
@@ -867,29 +788,6 @@ export default function LivePage() {
         </div>
       )}
 
-      {/* === Visual overlay === */}
-      {visual && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[var(--bg)]/95 px-4 py-8">
-          <div className="card relative w-full max-w-md overflow-hidden md:max-w-2xl">
-            <img
-              src={`data:${visual.mimeType};base64,${visual.dataBase64}`}
-              alt="Visual generado"
-              className="block h-auto w-full"
-            />
-          </div>
-          <p className="mt-4 max-w-md text-center font-display text-[15px] text-white/85">
-            {visual.caption}
-          </p>
-          <button
-            onClick={() => setVisual(null)}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[var(--blue-600)] px-6 py-3 font-display font-bold text-white"
-          >
-            <IconX size={16} stroke={2.5} />
-            Cerrar
-          </button>
-        </div>
-      )}
-
       {/* === Saving toast === */}
       {memorySaving && (
         <div className="pointer-events-none absolute inset-x-0 top-32 z-30 flex justify-center px-6">
@@ -897,18 +795,6 @@ export default function LivePage() {
             <span className="relative inline-block h-2 w-2 rounded-full bg-[var(--blue-400)] pulse-ring" />
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/85">
               guardando · {memorySaving.label}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* === Action toast === */}
-      {actionToast && (
-        <div className="pointer-events-none absolute inset-x-0 top-44 z-30 flex justify-center px-6">
-          <div className="flex items-center gap-2 rounded-full bg-[var(--blue-600)] px-4 py-2 text-white">
-            <IconCircleCheck size={14} stroke={2.25} />
-            <span className="font-mono text-[10px] uppercase tracking-[0.28em] font-bold">
-              {actionToast}
             </span>
           </div>
         </div>

@@ -19,6 +19,15 @@ export interface LiveSessionEvents {
   onClose?: (reason: string) => void;
   onError?: (err: Error) => void;
   onOpen?: () => void;
+  /** Fired when the server sends a new session-resumption handle. Persist
+   *  this in the parent so that on reconnect you can pass it back via
+   *  `LiveSessionInit.resumeHandle` and continue the conversation without
+   *  losing context. */
+  onResumeHandleUpdate?: (handle: string) => void;
+  /** Fired when the server announces it will disconnect soon. Use this to
+   *  preemptively spin up a new session BEFORE the current one closes so
+   *  the audio stream is uninterrupted. */
+  onGoAway?: (timeLeftSec: number) => void;
 }
 
 export interface LiveSessionInit {
@@ -26,7 +35,12 @@ export interface LiveSessionInit {
   model: string;
   systemInstruction: string;
   tools?: FunctionDeclaration[];
+  /** Spoken on first session ONLY. When `resumeHandle` is set we suppress
+   *  the kickoff so the resumed session continues seamlessly. */
   kickoff?: string;
+  /** Handle returned by a previous session via `onResumeHandleUpdate`.
+   *  When present the new session restores the prior conversation. */
+  resumeHandle?: string;
 }
 
 export class LiveSession {
@@ -46,6 +60,10 @@ export class LiveSession {
   // the on-screen mic toggle if they want to interrupt.
   private aiSpeaking = false;
   private aiSpeakingDrainTimer?: ReturnType<typeof setTimeout>;
+  /** Latest resumable handle issued by the server. Read by the parent
+   *  before triggering a reconnect so the next session continues the
+   *  conversation. */
+  private resumeHandle?: string;
 
   constructor(init: LiveSessionInit, events: LiveSessionEvents) {
     this.init = init;
@@ -81,6 +99,12 @@ export class LiveSession {
             silenceDurationMs: 1500,
           },
         },
+        // Session resumption: server periodically issues a `newHandle` we can use
+        // to reconnect later and continue the conversation without losing
+        // context. Pass the previous handle in `init.resumeHandle` to restore.
+        sessionResumption: this.init.resumeHandle
+          ? { handle: this.init.resumeHandle, transparent: true }
+          : { transparent: true },
       },
       callbacks: {
         onopen: () => {
@@ -92,8 +116,10 @@ export class LiveSession {
             this.setupReady = true;
             console.log("[live] setupComplete — gate open, flushing pending media");
             this.flushPending();
-            // Diagnostic kick-off: forces the model to speak first so we can verify the audio-out path
-            if (this.init.kickoff) {
+            // Send kickoff ONLY on a fresh session. When resuming, the server
+            // already has the prior turn history and re-greeting would feel
+            // jarring to the user mid-conversation.
+            if (this.init.kickoff && !this.init.resumeHandle) {
               console.log("[live] sending kickoff text to wake the model");
               this.session?.sendClientContent({
                 turns: [
@@ -101,12 +127,21 @@ export class LiveSession {
                 ],
                 turnComplete: true,
               });
+            } else if (this.init.resumeHandle) {
+              console.log("[live] resumed session — kickoff suppressed");
             }
           }
+          if (msg.sessionResumptionUpdate?.resumable && msg.sessionResumptionUpdate.newHandle) {
+            this.resumeHandle = msg.sessionResumptionUpdate.newHandle;
+            this.events.onResumeHandleUpdate?.(this.resumeHandle);
+          }
           if (msg.goAway) {
-            console.warn(
-              "[live] goAway timeLeft=" + JSON.stringify(msg.goAway.timeLeft ?? "?")
-            );
+            const raw = msg.goAway.timeLeft ?? "0s";
+            // Duration string like "30s" or "12.500s" — parse to seconds
+            const m = /^([\d.]+)s$/.exec(String(raw));
+            const seconds = m ? Math.max(0, Math.floor(parseFloat(m[1]))) : 0;
+            console.warn(`[live] goAway in ~${seconds}s — preempting reconnect`);
+            this.events.onGoAway?.(seconds);
           }
           this.handleMessage(msg);
         },
@@ -274,6 +309,15 @@ export class LiveSession {
 
   isClosed() {
     return this.closed;
+  }
+
+  /** Latest resumable handle issued by the server. Pass this to a new
+   *  LiveSession via `init.resumeHandle` to continue the conversation
+   *  without losing context. Returns undefined if the server has not yet
+   *  issued a handle (early in the session) or if the most recent state
+   *  was non-resumable (mid tool-call). */
+  getResumeHandle(): string | undefined {
+    return this.resumeHandle;
   }
 }
 

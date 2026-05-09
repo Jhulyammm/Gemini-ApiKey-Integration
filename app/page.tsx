@@ -3,10 +3,11 @@ import {
   IconArrowRight,
   IconBook,
   IconBookmark,
-  IconMessage2,
+  IconBulb,
   IconEye,
+  IconLanguage,
   IconMapPin,
-  IconPhone,
+  IconMessage2,
   IconSparkles,
 } from "@tabler/icons-react";
 import { SensLogo } from "@/components/SensLogo";
@@ -116,13 +117,22 @@ export default function Home() {
             Icon={IconMapPin}
           />
 
-          {/* CAPABILITY 4 — Acciones */}
+          {/* CAPABILITY 4 — Interpreta */}
           <CapabilityCard
             delay="reveal-5"
             num="04"
-            label="Llama"
-            tagline="por ti, manos libres"
-            Icon={IconPhone}
+            label="Interpreta"
+            tagline="el contexto y los gestos"
+            Icon={IconBulb}
+          />
+
+          {/* CAPABILITY 5 — Traduce */}
+          <CapabilityCard
+            delay="reveal-5"
+            num="05"
+            label="Traduce"
+            tagline="97 idiomas, en vivo"
+            Icon={IconLanguage}
           />
 
           {/* MEMORIA — feature card */}
