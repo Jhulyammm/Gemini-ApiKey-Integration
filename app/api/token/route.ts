@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LIVE_MODEL = "gemini-live-2.5-flash-preview";
+const LIVE_MODEL = "gemini-3.1-flash-live-preview";
 
 export async function POST() {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
@@ -16,7 +16,10 @@ export async function POST() {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1alpha" });
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: { apiVersion: "v1alpha" },
+    });
 
     const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
@@ -30,8 +33,6 @@ export async function POST() {
           model: LIVE_MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
           },
         },
       },

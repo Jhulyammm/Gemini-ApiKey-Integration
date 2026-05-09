@@ -118,6 +118,8 @@ export default function LivePage() {
             model,
             systemInstruction: cfg.systemPrompt,
             tools: cfg.tools,
+            kickoff:
+              "Saluda al usuario en una sola frase corta de 6-8 palabras: 'Hola, soy AccessLens, ¿en qué te ayudo?'",
           },
           {
             onOpen: () => {
@@ -165,7 +167,7 @@ export default function LivePage() {
         // Audio capture
         const capture = new AudioCapture((samples, level) => {
           setAudioLevel(level);
-          if (!muted) sessionRef.current?.sendAudio(int16ToBase64(samples));
+          if (!muted) sessionRef.current?.sendAudio(int16ToBase64(samples), level);
         });
         await capture.start();
         capture.setMuted(muted);
