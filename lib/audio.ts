@@ -2,6 +2,25 @@ export const INPUT_SAMPLE_RATE = 16000;
 export const OUTPUT_SAMPLE_RATE = 24000;
 const CAPTURE_BUFFER_SIZE = 4096;
 
+function resampleLinear(
+  input: Float32Array,
+  fromRate: number,
+  toRate: number
+): Float32Array {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outputLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outputLength);
+  for (let i = 0; i < outputLength; i++) {
+    const srcIdx = i * ratio;
+    const idx0 = Math.floor(srcIdx);
+    const idx1 = Math.min(idx0 + 1, input.length - 1);
+    const frac = srcIdx - idx0;
+    output[i] = input[idx0] * (1 - frac) + input[idx1] * frac;
+  }
+  return output;
+}
+
 export function int16ToBase64(samples: Int16Array): string {
   const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
   let binary = "";
@@ -39,29 +58,43 @@ export class AudioCapture {
       stream ??
       (await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
+          echoCancellation: false,
+          noiseSuppression: false,
           autoGainControl: true,
           channelCount: 1,
         },
       }));
+    const track = this.stream.getAudioTracks()[0];
+    if (track) {
+      const settings = track.getSettings();
+      console.log(
+        `[audio] mic device="${track.label}" muted=${track.muted} enabled=${track.enabled} settings=`,
+        settings
+      );
+    }
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.context = new Ctor({ sampleRate: INPUT_SAMPLE_RATE });
+    // Use device's native sample rate; we resample to 16kHz manually
+    this.context = new Ctor();
+    const nativeRate = this.context.sampleRate;
+    console.log(
+      `[audio] native sample rate=${nativeRate} -> resampling to ${INPUT_SAMPLE_RATE}`
+    );
     this.source = this.context.createMediaStreamSource(this.stream);
     this.processor = this.context.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1);
     this.processor.onaudioprocess = (e) => {
       if (this.muted) return;
       const float32 = e.inputBuffer.getChannelData(0);
-      const samples = new Int16Array(float32.length);
+      const resampled = resampleLinear(float32, nativeRate, INPUT_SAMPLE_RATE);
+      const samples = new Int16Array(resampled.length);
       let sumSquares = 0;
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
+      for (let i = 0; i < resampled.length; i++) {
+        const s = Math.max(-1, Math.min(1, resampled[i]));
         samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         sumSquares += s * s;
       }
-      const rms = Math.sqrt(sumSquares / float32.length);
+      const rms = Math.sqrt(sumSquares / resampled.length);
       this.onChunk(samples, rms);
     };
     this.source.connect(this.processor);
