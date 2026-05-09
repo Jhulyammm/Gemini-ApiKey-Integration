@@ -38,6 +38,14 @@ export class LiveSession {
   private setupReady = false;
   private pendingAudio: string[] = [];
   private pendingFrame: string | null = null;
+  // AI-speaking gate: while we're playing back model audio we DROP the user's mic
+  // upload. Echo cancellation isn't perfect (it takes ~300ms to converge at the
+  // start of each turn and can leak briefly mid-turn), and any speaker bleed
+  // reaching the server VAD would trigger a barge-in interrupt that cuts the
+  // model mid-sentence. Trade-off: real barge-in is disabled — user must tap
+  // the on-screen mic toggle if they want to interrupt.
+  private aiSpeaking = false;
+  private aiSpeakingDrainTimer?: ReturnType<typeof setTimeout>;
 
   constructor(init: LiveSessionInit, events: LiveSessionEvents) {
     this.init = init;
@@ -150,11 +158,28 @@ export class LiveSession {
             this.firstAudioLogged = true;
             console.log("[live] first audio chunk received");
           }
+          // Gate ON: AI is speaking, drop any inbound mic chunks until the gate
+          // releases so the speaker bleed never reaches the server VAD.
+          this.aiSpeaking = true;
+          if (this.aiSpeakingDrainTimer) {
+            clearTimeout(this.aiSpeakingDrainTimer);
+            this.aiSpeakingDrainTimer = undefined;
+          }
           this.events.onAudio?.(inline.data);
         }
       }
 
-      if (sc.turnComplete) this.events.onTurnComplete?.();
+      if (sc.turnComplete) {
+        // Drain timer: keep the gate closed for a moment after turnComplete so
+        // the AudioPlayer buffer finishes flushing before we re-open the mic.
+        if (this.aiSpeakingDrainTimer) clearTimeout(this.aiSpeakingDrainTimer);
+        this.aiSpeakingDrainTimer = setTimeout(() => {
+          this.aiSpeaking = false;
+          this.aiSpeakingDrainTimer = undefined;
+          console.log("[live] mic gate re-opened after turn drain");
+        }, 600);
+        this.events.onTurnComplete?.();
+      }
     }
 
     if (msg.toolCall?.functionCalls) {
@@ -192,6 +217,10 @@ export class LiveSession {
       if (this.pendingAudio.length < 16) this.pendingAudio.push(base64);
       return;
     }
+    // Drop the chunk while the AI is speaking so we never feed echo back to
+    // the server's VAD. Buffered chunks captured during model speech are
+    // discarded — there's no point sending stale audio after the gate opens.
+    if (this.aiSpeaking) return;
     this.session.sendRealtimeInput({
       audio: { data: base64, mimeType: "audio/pcm;rate=16000" },
     });
