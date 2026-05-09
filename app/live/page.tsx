@@ -3,6 +3,22 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
+  ArrowUpRight,
+  Bookmark,
+  ChevronRight,
+  Eye,
+  MapPin,
+  Mic,
+  MicOff,
+  Palette,
+  Play,
+  RotateCcw,
+  Save,
+  Square,
+  X,
+} from "lucide-react";
+import {
   AudioCapture,
   AudioPlayer,
   captureFrameJpegBase64,
@@ -11,6 +27,13 @@ import {
 import { LiveSession, fetchEphemeralToken } from "@/lib/gemini-live";
 import { ASSISTANT, SUGGESTIONS } from "@/lib/modes";
 import type { FunctionCall } from "@google/genai";
+
+const CHIP_ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+  describe: Eye,
+  draw: Palette,
+  find: MapPin,
+  remember: Save,
+};
 
 type Status =
   | "idle"
@@ -476,10 +499,149 @@ export default function LivePage() {
     }, 200);
   }, [startSession]);
 
-  /* ---------- Suggestion chip ---------- */
-  const sendSuggestion = useCallback((text: string) => {
-    sessionRef.current?.sendText(text);
+  /* ---------- TTS helper (used by direct chip actions) ---------- */
+  const speakText = useCallback((text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "es-ES";
+    utter.rate = 0.95;
+    window.speechSynthesis.speak(utter);
   }, []);
+
+  /* ---------- Direct chip actions (bypass Live model — guaranteed execution) ----------
+   *
+   * The Live model is unreliable about deciding to fire function calls — it often
+   * hallucinates a verbal confirmation ("listo, lo guardé") without actually invoking
+   * the tool. To make every chip 100% demoable we execute the underlying tool directly
+   * here and use the Web Speech API to narrate the outcome. The voice path (user
+   * speaking to the model) still relies on Gemini's tool-calling behaviour.
+   */
+
+  const directVisual = useCallback(
+    async (description: string, caption: string) => {
+      setActionToast("Generando visual…");
+      try {
+        const res = await fetch("/api/visual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description }),
+        });
+        if (!res.ok) throw new Error(`visual ${res.status}`);
+        const data = (await res.json()) as { mimeType: string; dataBase64: string };
+        setVisual({ mimeType: data.mimeType, dataBase64: data.dataBase64, caption });
+        speakText(caption);
+      } catch (e) {
+        console.error("[chip] visual failed:", e);
+        speakText("No pude generar el visual");
+      } finally {
+        setActionToast(null);
+      }
+    },
+    [speakText]
+  );
+
+  const directNearby = useCallback(
+    async (query: string, sceneCues: string) => {
+      setActionToast("Buscando lugar…");
+      const coords = await new Promise<GeolocationPosition | null>((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve(p),
+          () => resolve(null),
+          { timeout: 4000 }
+        );
+      });
+      try {
+        const res = await fetch("/api/nearby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query,
+            sceneCues,
+            lat: coords?.coords.latitude,
+            lng: coords?.coords.longitude,
+          }),
+        });
+        const data = (await res.json()) as { text?: string; error?: string };
+        const message = data.text || data.error || "No encontré nada cercano";
+        setActionToast(null);
+        speakText(message);
+      } catch (e) {
+        console.error("[chip] nearby failed:", e);
+        speakText("No pude buscar el lugar");
+        setActionToast(null);
+      }
+    },
+    [speakText]
+  );
+
+  const directSaveMemory = useCallback(
+    async (label: string) => {
+      setMemorySaving({ label });
+      try {
+        const v = videoRef.current;
+        if (!v) throw new Error("Sin acceso a cámara");
+        const imageBase64 = await captureFrameJpegBase64(v, 1280, 0.85);
+        if (!imageBase64) throw new Error("No se pudo capturar el frame");
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64, mimeType: "image/jpeg", label }),
+        });
+        if (!res.ok) throw new Error(`memory ${res.status}`);
+        const data = (await res.json()) as { description: string };
+        const newMem: Memory = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          label,
+          description: data.description,
+          imageBase64,
+          mimeType: "image/jpeg",
+          timestamp: Date.now(),
+        };
+        const next = [newMem, ...memories].slice(0, MAX_MEMORIES);
+        persistMemories(next);
+        speakText(`Listo, guardé ${label} en tus memorias.`);
+      } catch (e) {
+        console.error("[chip] save_memory failed:", e);
+        speakText("No pude guardar la memoria");
+      } finally {
+        setMemorySaving(null);
+      }
+    },
+    [memories, persistMemories, speakText]
+  );
+
+  const handleChipTap = useCallback(
+    (chipId: string) => {
+      switch (chipId) {
+        case "describe": {
+          // Pure voice flow — Gemini just needs to describe the current frame
+          const text = SUGGESTIONS.find((s) => s.id === "describe")?.text;
+          if (text) sessionRef.current?.sendText(text);
+          return;
+        }
+        case "draw":
+          void directVisual(
+            "Horario visual claro y bold para tomar pastillas cada 8 horas, agrupadas por desayuno, comida y cena, con iconos grandes de píldora y reloj. Estilo infografía editorial, paleta de alto contraste para baja visión, fondo oscuro, acentos amarillo. Texto en español.",
+            "Te dibujo el horario de las pastillas"
+          );
+          return;
+        case "find":
+          void directNearby("farmacia más cercana", "sin pistas visuales claras");
+          return;
+        case "remember": {
+          const time = new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          void directSaveMemory(`Memoria · ${time}`);
+          return;
+        }
+      }
+    },
+    [directVisual, directNearby, directSaveMemory]
+  );
 
   /* ---------- Cleanup ---------- */
   const stopAll = useCallback(() => {
@@ -559,7 +721,7 @@ export default function LivePage() {
           href="/"
           className="hairline-strong flex h-9 items-center gap-2 bg-black/50 px-3 backdrop-blur"
         >
-          <span className="font-mono text-sm">←</span>
+          <ArrowLeft size={14} strokeWidth={2.25} className="text-white/85" />
           <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/80">
             exit
           </span>
@@ -569,7 +731,7 @@ export default function LivePage() {
           onClick={() => setMemoriesOpen(true)}
           className="hairline-strong flex h-9 items-center gap-2 bg-black/50 px-3 backdrop-blur"
         >
-          <span className="font-mono text-sm">💾</span>
+          <Bookmark size={14} strokeWidth={2.25} className="text-[var(--signal)]" />
           <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/80">
             memorias{memories.length > 0 ? ` · ${memories.length}` : ""}
           </span>
@@ -619,7 +781,7 @@ export default function LivePage() {
                 <span className="font-display text-lg font-bold">
                   {status === "requesting-permissions" ? "Solicitando..." : "Activar permisos"}
                 </span>
-                <span className="font-mono">▶</span>
+                <ChevronRight size={20} strokeWidth={2.5} />
               </button>
             )}
             {status === "ready" && (
@@ -630,7 +792,7 @@ export default function LivePage() {
                 <span className="font-display text-lg font-bold">
                   Iniciar sesión Live
                 </span>
-                <span className="font-mono">▶</span>
+                <Play size={18} strokeWidth={2.5} />
               </button>
             )}
           </div>
@@ -661,8 +823,9 @@ export default function LivePage() {
             </p>
             <button
               onClick={() => startSession()}
-              className="mt-5 flex h-12 w-full items-center justify-center bg-[var(--signal)] font-bold text-[var(--signal-ink)]"
+              className="mt-5 flex h-12 w-full items-center justify-center gap-2 bg-[var(--signal)] font-bold text-[var(--signal-ink)]"
             >
+              <RotateCcw size={16} strokeWidth={2.5} />
               Reintentar
             </button>
           </div>
@@ -703,8 +866,9 @@ export default function LivePage() {
           </p>
           <button
             onClick={() => setVisual(null)}
-            className="mt-6 bg-[var(--signal)] px-6 py-3 font-display font-bold text-[var(--signal-ink)]"
+            className="mt-6 inline-flex items-center gap-2 bg-[var(--signal)] px-6 py-3 font-display font-bold text-[var(--signal-ink)]"
           >
+            <X size={16} strokeWidth={2.5} />
             Cerrar visual
           </button>
         </div>
@@ -733,28 +897,37 @@ export default function LivePage() {
               muted ? "bg-[var(--warn)] text-black" : "bg-black/40 text-white/90"
             }`}
           >
-            <span className="font-mono text-xs">{muted ? "●" : "○"}</span>
+            {muted ? (
+              <MicOff size={14} strokeWidth={2.25} />
+            ) : (
+              <Mic size={14} strokeWidth={2.25} />
+            )}
             <span className="font-mono text-[10px] uppercase tracking-[0.28em]">
               {muted ? "mic off" : "mic on"}
             </span>
           </button>
         </div>
 
-        {/* Suggestion chips — tap = sends text to model as if user spoke it */}
+        {/* Action chips — tap executes the underlying tool DIRECTLY (bypasses the
+            Live model so the demo is reliable). The voice flow still relies on the
+            model deciding to call its function declarations. */}
         <div className="grid grid-cols-4 gap-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s.id}
-              disabled={!isLive}
-              onClick={() => sendSuggestion(s.text)}
-              className="group relative flex flex-col items-center justify-center border border-[var(--hairline-strong)] bg-black/55 px-2 py-3 text-center text-white backdrop-blur transition disabled:opacity-40 hover:border-[var(--signal)] active:bg-[var(--signal)] active:text-[var(--signal-ink)]"
-            >
-              <span className="text-2xl leading-none">{s.emoji}</span>
-              <span className="mt-1 font-display text-[11px] font-bold uppercase tracking-wider">
-                {s.label}
-              </span>
-            </button>
-          ))}
+          {SUGGESTIONS.map((s) => {
+            const Icon = CHIP_ICONS[s.id] ?? Eye;
+            return (
+              <button
+                key={s.id}
+                disabled={!isLive}
+                onClick={() => handleChipTap(s.id)}
+                className="group relative flex flex-col items-center justify-center gap-1.5 border border-[var(--hairline-strong)] bg-black/55 px-2 py-3 text-center text-white backdrop-blur transition disabled:opacity-40 hover:border-[var(--signal)] active:bg-[var(--signal)] active:text-[var(--signal-ink)]"
+              >
+                <Icon size={22} strokeWidth={2} />
+                <span className="font-display text-[11px] font-bold uppercase tracking-wider">
+                  {s.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Stop button (only when live) */}
@@ -763,7 +936,7 @@ export default function LivePage() {
             onClick={stopAll}
             className="mt-3 flex h-11 w-full items-center justify-center gap-2 bg-black/55 backdrop-blur hairline-strong"
           >
-            <span className="font-mono text-xs text-[var(--warn)]">■</span>
+            <Square size={11} strokeWidth={2.5} fill="currentColor" className="text-[var(--warn)]" />
             <span className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/85">
               detener sesión
             </span>
@@ -787,7 +960,7 @@ export default function LivePage() {
       {actionToast && (
         <div className="pointer-events-none absolute inset-x-0 top-36 z-30 flex justify-center px-6">
           <div className="hairline-strong flex items-center gap-2 bg-[var(--signal)] px-4 py-2 text-[var(--signal-ink)]">
-            <span className="font-mono text-xs">▶</span>
+            <ArrowUpRight size={14} strokeWidth={2.5} />
             <span className="font-mono text-[11px] uppercase tracking-[0.28em] font-bold">
               {actionToast}
             </span>
@@ -807,7 +980,7 @@ export default function LivePage() {
               }}
               className="hairline-strong flex h-9 items-center gap-2 px-3"
             >
-              <span className="font-mono text-sm">←</span>
+              <ArrowLeft size={14} strokeWidth={2.25} />
               <span className="font-mono text-[10px] uppercase tracking-[0.32em]">
                 volver
               </span>
@@ -828,10 +1001,10 @@ export default function LivePage() {
           <div className="flex-1 overflow-y-auto px-4 py-5">
             {memories.length === 0 && (
               <div className="flex h-full flex-col items-center justify-center px-8 text-center text-white/55">
-                <span className="text-5xl">💾</span>
-                <p className="mt-4 max-w-xs font-display text-lg leading-tight">
-                  Aún no tienes memorias. Apunta la cámara a algo importante y di
-                  &quot;guarda esto&quot;.
+                <Save size={56} strokeWidth={1.5} className="text-white/30" />
+                <p className="mt-5 max-w-xs font-display text-lg leading-tight">
+                  Aún no tienes memorias. Apunta la cámara a algo importante y toca
+                  el botón Recuerda o di &quot;guarda esto&quot;.
                 </p>
               </div>
             )}
@@ -877,9 +1050,10 @@ export default function LivePage() {
                     setActiveMemory(null);
                     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
                   }}
-                  className="mb-4 font-mono text-[10px] uppercase tracking-[0.32em] text-white/70"
+                  className="mb-4 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.32em] text-white/70"
                 >
-                  ← todas las memorias
+                  <ArrowLeft size={12} strokeWidth={2.25} />
+                  todas las memorias
                 </button>
                 <div className="hairline-strong overflow-hidden bg-black">
                   <img
@@ -902,14 +1076,15 @@ export default function LivePage() {
                     onClick={() => speakMemory(activeMemory)}
                     className="flex h-12 flex-1 items-center justify-center gap-2 bg-[var(--signal)] font-display font-bold text-[var(--signal-ink)]"
                   >
-                    <span className="font-mono">▶</span> Reescuchar
+                    <Play size={16} strokeWidth={2.5} fill="currentColor" />
+                    Reescuchar
                   </button>
                   <button
                     onClick={() => deleteMemory(activeMemory.id)}
                     className="hairline-strong flex h-12 w-12 items-center justify-center text-[var(--warn)]"
                     aria-label="Eliminar memoria"
                   >
-                    <span className="font-mono">✕</span>
+                    <X size={16} strokeWidth={2.5} />
                   </button>
                 </div>
               </div>

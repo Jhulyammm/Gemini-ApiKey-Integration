@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Play } from "lucide-react";
 
 const TICKERS = [
   "97 IDIOMAS",
@@ -118,9 +119,9 @@ export default function Home() {
           </div>
           <span
             aria-hidden
-            className="grid h-12 w-12 place-items-center bg-[var(--signal-ink)] font-mono text-[var(--signal)] transition group-hover:translate-x-1"
+            className="grid h-12 w-12 place-items-center bg-[var(--signal-ink)] text-[var(--signal)] transition group-hover:translate-x-1"
           >
-            ▶
+            <Play size={18} strokeWidth={2.5} fill="currentColor" />
           </span>
         </Link>
 
