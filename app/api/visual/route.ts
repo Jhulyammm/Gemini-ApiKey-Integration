@@ -90,6 +90,19 @@ ${description}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[api/visual] failed in ${Date.now() - t0}ms:`, message);
+    // Detect the very common "API key has no billing" error so the client can
+    // surface a useful instruction instead of a generic 500.
+    if (/quota|RESOURCE_EXHAUSTED|free_tier|paid plan|upgrade/i.test(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "Tu API key de Google no tiene facturación habilitada para generación de imágenes. Activa billing en https://aistudio.google.com/apikey y vuelve a intentar.",
+          needsBilling: true,
+          original: message,
+        },
+        { status: 402 }
+      );
+    }
     return NextResponse.json(
       { error: `No se pudo generar la imagen: ${message}` },
       { status: 500 }

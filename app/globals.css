@@ -1,25 +1,50 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08080a;
-  --foreground: #f5f4ee;
-  --signal: #ffe600;
-  --signal-ink: #08080a;
-  --warn: #ff3b30;
-  --info: #5be0ff;
-  --hairline: rgba(245, 244, 238, 0.14);
-  --hairline-strong: rgba(245, 244, 238, 0.32);
-  --scrim-top: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
-  --scrim-bottom: linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
+  /* Dark blue palette — replaces yellow-on-black "wayfinding" */
+  --bg: #080c14;
+  --bg-card: #0f1623;
+  --bg-elev: #131c2d;
+  --bg-overlay: rgba(10, 14, 20, 0.92);
+  --foreground: #e6edf7;
+  --muted: rgba(230, 237, 247, 0.6);
+  --muted-soft: rgba(230, 237, 247, 0.4);
+
+  --blue-50: #eff6ff;
+  --blue-300: #93c5fd;
+  --blue-400: #60a5fa;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --blue-800: #1e40af;
+  --blue-900: #1e3a8a;
+  --blue-950: #172554;
+
+  --signal: var(--blue-400);
+  --signal-strong: var(--blue-600);
+  --signal-ink: #ffffff;
+  --warn: #f87171;
+  --success: #22c55e;
+
+  --hairline: rgba(59, 130, 246, 0.15);
+  --hairline-strong: rgba(59, 130, 246, 0.32);
+  --hairline-soft: rgba(255, 255, 255, 0.08);
+
+  --camera-grad: linear-gradient(180deg, #1a2330 0%, #0a1020 100%);
+  --hero-grad: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 60%, #2563eb 100%);
+
+  --scrim-top: linear-gradient(180deg, rgba(8, 12, 20, 0.85) 0%, transparent 100%);
+  --scrim-bottom: linear-gradient(0deg, rgba(8, 12, 20, 0.92) 0%, transparent 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-background: var(--bg);
   --color-foreground: var(--foreground);
   --color-signal: var(--signal);
+  --color-signal-strong: var(--signal-strong);
   --color-signal-ink: var(--signal-ink);
   --color-warn: var(--warn);
-  --color-info: var(--info);
+  --color-success: var(--success);
   --color-hairline: var(--hairline);
   --color-hairline-strong: var(--hairline-strong);
   --font-display: var(--font-display, ui-sans-serif, system-ui);
@@ -28,7 +53,7 @@
 
 html,
 body {
-  background: var(--background);
+  background: var(--bg);
   color: var(--foreground);
   font-family: var(--font-display);
   overscroll-behavior: none;
@@ -49,123 +74,242 @@ body {
   font-feature-settings: "ss01";
 }
 
-/* Grain — subtle film texture for atmosphere */
+/* === Bento card primitives === */
+.card {
+  background: var(--bg-card);
+  border: 0.5px solid var(--hairline);
+  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.card-elev {
+  background: var(--bg-elev);
+  border: 0.5px solid var(--hairline);
+  border-radius: 18px;
+}
+
+/* === Hero gradient card === */
+.hero-grad {
+  background: var(--hero-grad);
+  position: relative;
+}
+.hero-grad::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(80% 50% at 80% 0%, rgba(255,255,255,0.18) 0%, transparent 60%),
+    radial-gradient(50% 50% at 0% 100%, rgba(0,0,0,0.25) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* === Grid noise (very subtle, blue-tinted) === */
 .grain::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.07;
+  opacity: 0.05;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.6'/></svg>");
 }
 
-/* Hairline frame for editorial/wayfinding feel */
+/* === Camera viewer background gradient === */
+.camera-bg {
+  background: var(--camera-grad);
+}
+
+/* === Corner guides on camera viewer === */
+.corner-guide {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+.corner-guide.tl { top: 16px; left: 16px; border-top-width: 1.5px; border-left-width: 1.5px; }
+.corner-guide.tr { top: 16px; right: 16px; border-top-width: 1.5px; border-right-width: 1.5px; }
+.corner-guide.bl { bottom: 16px; left: 16px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.corner-guide.br { bottom: 16px; right: 16px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+/* Center focus circle */
+.focus-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border: 1.25px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: focus-pulse 2.4s ease-in-out infinite;
+}
+.focus-circle::before {
+  content: "";
+  position: absolute;
+  inset: 38%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+}
+@keyframes focus-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+/* === Live pulse dot === */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--success);
+  opacity: 0.35;
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(0.6); opacity: 0; }
+}
+
+/* Hairline frames */
 .hairline {
-  border: 1px solid var(--hairline);
+  border: 0.5px solid var(--hairline);
 }
 .hairline-strong {
-  border: 1px solid var(--hairline-strong);
+  border: 0.5px solid var(--hairline-strong);
 }
 
-/* Diagonal stripe pattern for ALERT/RECORDING state */
-.stripes-warn {
-  background-image: repeating-linear-gradient(
-    45deg,
-    var(--warn) 0px,
-    var(--warn) 8px,
-    #08080a 8px,
-    #08080a 16px
-  );
+/* === Voice wave bars (12-bar wave for live indicator) === */
+.voice-bar {
+  display: inline-block;
+  width: 3px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+  transform-origin: bottom center;
+}
+@keyframes wave-bounce {
+  0%, 100% { transform: scaleY(0.18); }
+  50% { transform: scaleY(1); }
 }
 
-/* Pulse ring for active mic */
+/* === Pulse ring (mic button + chip active) === */
 @keyframes pulse-ring {
-  0% {
-    transform: scale(0.9);
-    opacity: 0.85;
-  }
-  70% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(0.9);
-    opacity: 0;
-  }
+  0% { transform: scale(0.9); opacity: 0.85; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(0.9); opacity: 0; }
 }
 .pulse-ring::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: var(--signal);
+  background: var(--signal-strong);
   animation: pulse-ring 1.6s ease-out infinite;
   z-index: -1;
 }
 
-/* Stagger reveal */
+/* === Caption box === */
+.caption-box {
+  background: rgba(0, 0, 0, 0.55);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: rgba(255, 255, 255, 0.9);
+  margin-left: 4px;
+  animation: blink 1.05s steps(1) infinite;
+}
+
+/* === Stagger reveal === */
 @keyframes fade-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.reveal {
-  animation: fade-rise 0.6s cubic-bezier(0.2, 0.9, 0.2, 1) both;
-}
+.reveal { animation: fade-rise 0.6s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
 .reveal-1 { animation-delay: 0.05s; }
-.reveal-2 { animation-delay: 0.18s; }
-.reveal-3 { animation-delay: 0.32s; }
-.reveal-4 { animation-delay: 0.48s; }
-.reveal-5 { animation-delay: 0.66s; }
+.reveal-2 { animation-delay: 0.16s; }
+.reveal-3 { animation-delay: 0.28s; }
+.reveal-4 { animation-delay: 0.42s; }
+.reveal-5 { animation-delay: 0.58s; }
+.reveal-6 { animation-delay: 0.74s; }
 
-/* Subtitle entrance — word-by-word feel via character reveal */
+/* Subtitle entrance */
 @keyframes caption-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
+  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);  filter: blur(0); }
 }
-.caption-line {
-  animation: caption-rise 0.4s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+.caption-line { animation: caption-rise 0.4s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+
+/* === Stat number with glow (used in landing 97 stat) === */
+.stat-glow {
+  text-shadow: 0 0 38px rgba(96, 165, 250, 0.5);
 }
 
-/* VU meter bars */
-@keyframes vu-bounce {
-  0%, 100% { transform: scaleY(0.2); }
-  50% { transform: scaleY(1); }
+/* === Audio bars (landing stat card) === */
+.audio-bars {
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  height: 36px;
+}
+.audio-bars span {
+  width: 4px;
+  background: linear-gradient(180deg, var(--blue-400), var(--blue-600));
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: audio-bar 1.4s ease-in-out infinite;
+}
+.audio-bars span:nth-child(1) { animation-delay: 0.0s; height: 28%; }
+.audio-bars span:nth-child(2) { animation-delay: 0.1s; height: 65%; }
+.audio-bars span:nth-child(3) { animation-delay: 0.2s; height: 42%; }
+.audio-bars span:nth-child(4) { animation-delay: 0.3s; height: 88%; }
+.audio-bars span:nth-child(5) { animation-delay: 0.4s; height: 55%; }
+.audio-bars span:nth-child(6) { animation-delay: 0.5s; height: 72%; }
+.audio-bars span:nth-child(7) { animation-delay: 0.6s; height: 38%; }
+@keyframes audio-bar {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.65; }
+  50%      { transform: scaleY(1);   opacity: 1; }
 }
 
-/* Marquee for status ticker */
+/* === Rotating gradient halo (used behind big mic button) === */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.halo {
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, var(--blue-400), var(--blue-700), var(--blue-400));
+  animation: spin-slow 4s linear infinite;
+  filter: blur(8px);
+  opacity: 0.7;
+  z-index: -1;
+}
+
+/* Marquee */
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
-.marquee-track {
-  animation: marquee 18s linear infinite;
-}
-
-/* Frame corner markers */
-.frame-corner {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  border-color: var(--signal);
-  border-style: solid;
-  border-width: 0;
-}
-.frame-corner.tl { top: 14px; left: 14px; border-top-width: 2px; border-left-width: 2px; }
-.frame-corner.tr { top: 14px; right: 14px; border-top-width: 2px; border-right-width: 2px; }
-.frame-corner.bl { bottom: 14px; left: 14px; border-bottom-width: 2px; border-left-width: 2px; }
-.frame-corner.br { bottom: 14px; right: 14px; border-bottom-width: 2px; border-right-width: 2px; }
+.marquee-track { animation: marquee 22s linear infinite; }
