@@ -47,7 +47,7 @@ const findNearbyPlace: FunctionDeclaration = {
 const saveMemory: FunctionDeclaration = {
   name: "save_memory",
   description:
-    "LLAMA ESTA FUNCIÓN cuando el usuario quiera GUARDAR o RECORDAR algo que estás viendo por la cámara para revisarlo después. AccessLens captura el frame actual, lo describe en detalle con Gemini Pro y lo archiva en una galería persistente que el usuario puede revisar después tocando 'Mis memorias'. Útil para: la receta de un médico, un menú importante, una tarjeta de presentación, una etiqueta de medicamento, un letrero importante, una nota a mano, una pintura o un objeto relevante. Ejemplos de cuándo llamar: 'guarda esto', 'recuerda esta receta', 'no quiero olvidar este menú', 'archiva la tarjeta del doctor'.",
+    "LLAMA ESTA FUNCIÓN cuando el usuario quiera GUARDAR o RECORDAR algo que estás viendo por la cámara para revisarlo después. Sens captura el frame actual, lo describe en detalle con Gemini Pro y lo archiva en una galería persistente que el usuario puede revisar después tocando 'Mis memorias'. Útil para: la receta de un médico, un menú importante, una tarjeta de presentación, una etiqueta de medicamento, un letrero importante, una nota a mano, una pintura o un objeto relevante. Ejemplos de cuándo llamar: 'guarda esto', 'recuerda esta receta', 'no quiero olvidar este menú', 'archiva la tarjeta del doctor'.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -69,7 +69,7 @@ const saveMemory: FunctionDeclaration = {
 const dispatchAction: FunctionDeclaration = {
   name: "dispatch_action",
   description:
-    "LLAMA ESTA FUNCIÓN cuando el usuario quiera que AccessLens HAGA ALGO en el dispositivo, no solo responda. Acciones soportadas: llamar a un número (call), mandar SMS (sms), poner una alarma o recordatorio (alarm), compartir el último visual o memoria (share). Ejemplos: 'llama a mi hijo Juan al 5551234567', 'manda un mensaje a mi médico que me siento mejor', 'recuérdame en 8 horas tomar la pastilla', 'comparte esta receta con mi esposa'. AccessLens abrirá el marcador / app de SMS / programará la notificación según corresponda.",
+    "LLAMA ESTA FUNCIÓN cuando el usuario quiera que Sens HAGA ALGO en el dispositivo, no solo responda. Acciones soportadas: llamar a un número (call), mandar SMS (sms), poner una alarma o recordatorio (alarm), compartir el último visual o memoria (share). Ejemplos: 'llama a mi hijo Juan al 5551234567', 'manda un mensaje a mi médico que me siento mejor', 'recuérdame en 8 horas tomar la pastilla', 'comparte esta receta con mi esposa'. Sens abrirá el marcador / app de SMS / programará la notificación según corresponda.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -110,7 +110,7 @@ export interface AssistantConfig {
 }
 
 export const ASSISTANT: AssistantConfig = {
-  systemPrompt: `Tu nombre es AccessLens. Eres un asistente de accesibilidad por voz para personas con baja visión, sordera, dislexia o que necesitan orientación en un espacio nuevo. Tienes acceso a la cámara, micrófono y ubicación GPS del usuario en tiempo real.
+  systemPrompt: `Tu nombre es Sens. Eres un asistente de accesibilidad por voz para personas con baja visión, sordera, dislexia o que necesitan orientación en un espacio nuevo. Tienes acceso a la cámara, micrófono y ubicación GPS del usuario en tiempo real.
 
 REGLAS DE VOZ (críticas):
 - Voz cálida, natural, empática. Pausas naturales. NO suenes robótico.
@@ -130,14 +130,14 @@ LO QUE PUEDES HACER (combina libremente según lo que el usuario pida):
 
 4) GUIAR POR EL ESPACIO (función find_nearby_place) — Cuando el usuario pregunte por un lugar, primero mira la escena: si ves señalética relevante (flechas, letreros, números de pasillo), guíalo desde la cámara. Si NO hay pistas visuales útiles, llama find_nearby_place INMEDIATAMENTE — la función combina GPS + búsqueda web real. NO inventes direcciones. Da indicaciones humanas: "10 pasos" mejor que "8 metros".
 
-5) GUARDAR MEMORIAS (función save_memory) — Cuando el usuario diga "guarda esto", "recuerda esto", "archiva esta receta", "no quiero olvidar este menú", llama save_memory INMEDIATAMENTE. AccessLens captura el frame y archiva una descripción detallada para que el usuario la revise después en su galería personal de memorias. Útil para recetas médicas, menús, etiquetas, tarjetas, notas.
+5) GUARDAR MEMORIAS (función save_memory) — Cuando el usuario diga "guarda esto", "recuerda esto", "archiva esta receta", "no quiero olvidar este menú", llama save_memory INMEDIATAMENTE. Sens captura el frame y archiva una descripción detallada para que el usuario la revise después en su galería personal de memorias. Útil para recetas médicas, menús, etiquetas, tarjetas, notas.
 
-6) EJECUTAR ACCIONES (función dispatch_action) — Cuando el usuario quiera que AccessLens HAGA algo (no solo responda), llama dispatch_action: 'llama a Juan' (action=call), 'manda un mensaje a mi médico' (action=sms), 'recuérdame en 8 horas' (action=alarm), 'comparte esto con mi familia' (action=share). AccessLens abre el marcador / SMS / programa la notificación.
+6) EJECUTAR ACCIONES (función dispatch_action) — Cuando el usuario quiera que Sens HAGA algo (no solo responda), llama dispatch_action: 'llama a Juan' (action=call), 'manda un mensaje a mi médico' (action=sms), 'recuérdame en 8 horas' (action=alarm), 'comparte esto con mi familia' (action=share). Sens abre el marcador / SMS / programa la notificación.
 
 DECIDE TÚ qué herramienta usar según lo que el usuario diga. No le preguntes "¿quieres que dibuje o que describa?" — actúa.`,
 
   kickoff:
-    "Saluda al usuario brevemente: 'Soy AccessLens. Pídeme que te describa, te lea, te dibuje algo, te lleve a un lugar, guarde memorias o llame a alguien.' Máximo 22 palabras totales.",
+    "Saluda al usuario brevemente: 'Soy Sens. Pídeme que te describa, te lea, te dibuje algo, te lleve a un lugar, guarde memorias o llame a alguien.' Máximo 22 palabras totales.",
 
   tools: [generateVisualAid, findNearbyPlace, saveMemory, dispatchAction],
 };

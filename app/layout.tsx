@@ -15,20 +15,20 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AccessLens — Tus ojos, oídos y guía con IA en vivo",
+  title: "Sens — Tus ojos, oídos y guía con IA en vivo",
   description:
-    "Asistente de accesibilidad en tiempo real con Gemini Live API. Describe escenas, traduce en 97 idiomas, simplifica texto y guía por el espacio.",
-  applicationName: "AccessLens",
+    "Asistente de accesibilidad por voz en tiempo real con Gemini Live. Describe escenas, traduce 97 idiomas, guarda memorias y llama por ti.",
+  applicationName: "Sens",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "AccessLens",
+    title: "Sens",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#080c14",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

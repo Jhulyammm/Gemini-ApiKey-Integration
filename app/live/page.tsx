@@ -4,16 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconArrowLeft,
-  IconBook,
   IconBookmark,
   IconBookmarkPlus,
   IconCameraRotate,
   IconCircleCheck,
-  IconEye,
-  IconMapPin,
   IconMicrophone,
   IconMicrophoneOff,
-  IconPalette,
   IconPlayerPlayFilled,
   IconPlayerStopFilled,
   IconRefresh,
@@ -30,6 +26,7 @@ import {
 } from "@/lib/audio";
 import { LiveSession, fetchEphemeralToken } from "@/lib/gemini-live";
 import { ASSISTANT } from "@/lib/modes";
+import { SensLogo } from "@/components/SensLogo";
 import type { FunctionCall } from "@google/genai";
 
 type Status =
@@ -57,50 +54,21 @@ interface Memory {
   timestamp: number;
 }
 
-type ModeId = "ojos" | "leer" | "visual" | "donde";
-
-interface ModeChip {
-  id: ModeId;
-  label: string;
-  Icon: React.ComponentType<{ size?: number; stroke?: number }>;
-  directive: string; // sent to Live model on mode select
-}
-
-const MODE_CHIPS: ModeChip[] = [
-  {
-    id: "ojos",
-    label: "Ojos",
-    Icon: IconEye,
-    directive:
-      "Modo OJOS activo. Describe brevemente y con detalle lo que ves por la cámara ahora mismo. Frase corta, voz cálida.",
-  },
-  {
-    id: "leer",
-    label: "Leer",
-    Icon: IconBook,
-    directive:
-      "Modo LEER activo. Lee LITERALMENTE en voz alta el texto que veas en cámara. Si está en otro idioma, tradúcelo al español. Frases cortas.",
-  },
-  {
-    id: "visual",
-    label: "Visual",
-    Icon: IconPalette,
-    directive:
-      "Modo VISUAL activo. Pregúntame en una sola frase corta y amable QUÉ quiero que dibujes. Cuando responda, llama generate_visual_aid INMEDIATAMENTE con descripción detallada en alto contraste.",
-  },
-  {
-    id: "donde",
-    label: "Dónde",
-    Icon: IconMapPin,
-    directive:
-      "Modo DÓNDE activo. Pregúntame en una sola frase corta A DÓNDE quiero ir. Cuando responda, llama find_nearby_place INMEDIATAMENTE con mi consulta.",
-  },
-];
-
 const SESSION_LIMIT_SEC = 110;
 const FRAME_INTERVAL_MS = 1000;
-const MEMORIES_KEY = "accesslens:memories";
+const MEMORIES_KEY = "accesslens:memories"; // keep key for back-compat with existing memories
 const MAX_MEMORIES = 20;
+
+// Rotating hints shown when there's no active conversation. Cue the user that
+// this is a voice-driven app — they don't need to tap anything to talk.
+const VOICE_HINTS = [
+  "“describe lo que veo”",
+  "“lee este menú”",
+  "“guarda esto en memorias”",
+  "“dónde queda la farmacia”",
+  "“llama a mi hijo Juan”",
+  "“recuérdame en 8 horas tomar la pastilla”",
+];
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -111,7 +79,6 @@ function formatTime(s: number) {
 export default function LivePage() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState<ModeId | null>(null);
   const [userCaption, setUserCaption] = useState("");
   const [aiCaption, setAiCaption] = useState("");
   const [visual, setVisual] = useState<VisualOverlay | null>(null);
@@ -125,6 +92,7 @@ export default function LivePage() {
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [hintIndex, setHintIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -137,6 +105,14 @@ export default function LivePage() {
   const aiBufferRef = useRef("");
   const captionTimerRef = useRef<number | null>(null);
   const reconnectingRef = useRef(false);
+
+  /* ---------- Hint rotator ---------- */
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setHintIndex((i) => (i + 1) % VOICE_HINTS.length);
+    }, 4500);
+    return () => window.clearInterval(t);
+  }, []);
 
   /* ---------- Permissions ---------- */
   const requestPermissions = useCallback(
@@ -153,7 +129,6 @@ export default function LivePage() {
             channelCount: 1,
           },
         });
-        // Replace previous stream if any
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = stream;
         const video = videoRef.current;
@@ -176,7 +151,6 @@ export default function LivePage() {
     const next = facingMode === "environment" ? "user" : "environment";
     setFacingMode(next);
     if (status === "live" || status === "ready") {
-      // Stop video tracks but keep audio (user already authorized mic)
       const stream = streamRef.current;
       stream?.getVideoTracks().forEach((t) => t.stop());
       try {
@@ -185,7 +159,6 @@ export default function LivePage() {
         });
         const newVideoTrack = newStream.getVideoTracks()[0];
         if (stream && newVideoTrack) {
-          // Replace the video track in the existing stream
           stream.getVideoTracks().forEach((t) => stream.removeTrack(t));
           stream.addTrack(newVideoTrack);
           if (videoRef.current) {
@@ -199,7 +172,7 @@ export default function LivePage() {
     }
   }, [facingMode, status]);
 
-  /* ---------- TTS helper ---------- */
+  /* ---------- TTS ---------- */
   const speakText = useCallback((text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -241,7 +214,7 @@ export default function LivePage() {
     [speakText]
   );
 
-  /* ---------- Direct save current frame as memory ---------- */
+  /* ---------- Save current frame as memory ---------- */
   const saveCurrentMoment = useCallback(async () => {
     const time = new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -275,7 +248,7 @@ export default function LivePage() {
       };
       const next = [newMem, ...memories].slice(0, MAX_MEMORIES);
       persistMemories(next);
-      speakText(`Listo, guardé ${label} en tus memorias.`);
+      speakText(`Listo, guardé ${label}.`);
     } catch (e) {
       console.error("[memory] save failed:", e);
       speakText("No pude guardar la memoria");
@@ -291,28 +264,28 @@ export default function LivePage() {
     return () => window.clearTimeout(t);
   }, [actionToast]);
 
-  /* ---------- runAction (used by dispatch_action tool) ---------- */
+  /* ---------- runAction ---------- */
   const runAction = useCallback(
     (action: string, phone: string, message: string, delayMinutes: number) => {
       const phoneClean = phone.replace(/[^+\d]/g, "");
       if (action === "call" && phoneClean) {
         window.location.href = `tel:${phoneClean}`;
-        setActionToast(`Abriendo marcador → ${phoneClean}`);
+        setActionToast(`Marcador → ${phoneClean}`);
         return { ok: true, detail: "Marcador abierto" };
       }
       if (action === "sms" && phoneClean) {
         const body = encodeURIComponent(message);
         window.location.href = `sms:${phoneClean}${body ? `?body=${body}` : ""}`;
-        setActionToast(`Abriendo SMS → ${phoneClean}`);
+        setActionToast(`SMS → ${phoneClean}`);
         return { ok: true, detail: "SMS abierto" };
       }
       if (action === "alarm" && delayMinutes > 0) {
         const ms = delayMinutes * 60 * 1000;
         const fire = () => {
           if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("AccessLens — recordatorio", { body: message || "Es hora" });
+            new Notification("Sens — recordatorio", { body: message || "Es hora" });
           } else {
-            alert(`AccessLens recordatorio: ${message || "Es hora"}`);
+            alert(`Sens recordatorio: ${message || "Es hora"}`);
           }
         };
         if ("Notification" in window && Notification.permission !== "granted") {
@@ -325,7 +298,7 @@ export default function LivePage() {
       }
       if (action === "share" && navigator.share) {
         navigator
-          .share({ title: "AccessLens", text: message || "Compartido desde AccessLens" })
+          .share({ title: "Sens", text: message || "Compartido desde Sens" })
           .catch(() => undefined);
         setActionToast("Compartiendo…");
         return { ok: true, detail: "Diálogo abierto" };
@@ -335,7 +308,7 @@ export default function LivePage() {
     []
   );
 
-  /* ---------- Tool calls (when Gemini fires functions) ---------- */
+  /* ---------- Tool calls ---------- */
   const handleToolCall = useCallback(
     async (call: FunctionCall) => {
       const id = call.id ?? "";
@@ -355,7 +328,10 @@ export default function LivePage() {
           if (!res.ok) {
             const body = await res.text();
             try {
-              const parsed = JSON.parse(body) as { error?: string; needsBilling?: boolean };
+              const parsed = JSON.parse(body) as {
+                error?: string;
+                needsBilling?: boolean;
+              };
               if (parsed.needsBilling) {
                 speakText(
                   "Para dibujar imágenes necesitas activar facturación en tu API key de Google."
@@ -492,7 +468,6 @@ export default function LivePage() {
       if (frameTimerRef.current) window.clearInterval(frameTimerRef.current);
       if (sessionTimerRef.current) window.clearInterval(sessionTimerRef.current);
 
-      // iOS Safari: create + resume AudioPlayer synchronously inside the user gesture
       const player = new AudioPlayer();
       void player.resume();
       playerRef.current = player;
@@ -600,15 +575,6 @@ export default function LivePage() {
     }, 200);
   }, [startSession]);
 
-  /* ---------- Mode select ---------- */
-  const selectMode = useCallback((id: ModeId) => {
-    setActiveMode(id);
-    const chip = MODE_CHIPS.find((c) => c.id === id);
-    if (chip && sessionRef.current) {
-      sessionRef.current.sendText(chip.directive);
-    }
-  }, []);
-
   /* ---------- Cleanup ---------- */
   const stopAll = useCallback(() => {
     sessionRef.current?.close();
@@ -641,14 +607,15 @@ export default function LivePage() {
   }, [muted]);
 
   const isLive = status === "live" || status === "reconnecting";
+  const showHints = isLive && !userCaption && !aiCaption && !visual;
 
-  /* ---------- Voice wave bars (12 bars with audioLevel modulation) ---------- */
-  const renderVoiceBars = () => {
+  /* ---------- Voice wave bars (responsive count) ---------- */
+  const renderVoiceBars = (count = 12) => {
     const base = Math.min(1, audioLevel * 5);
     return (
-      <div className="flex items-end gap-[3px] h-9">
-        {Array.from({ length: 12 }).map((_, i) => {
-          const phase = (i + 1) / 12;
+      <div className="flex items-end gap-[3px] h-9 md:h-11">
+        {Array.from({ length: count }).map((_, i) => {
+          const phase = (i + 1) / count;
           const t = (Date.now() / 90 + i * 0.6) % (Math.PI * 2);
           const wave = 0.3 + Math.abs(Math.sin(t)) * 0.7;
           const h = isLive
@@ -672,44 +639,109 @@ export default function LivePage() {
 
   return (
     <main className="relative h-[100svh] w-screen overflow-hidden bg-[var(--bg)] text-white">
-      {/* === Camera background gradient (always behind) === */}
+      {/* === Camera background gradient === */}
       <div aria-hidden className="camera-bg absolute inset-0" />
 
-      {/* === Camera === */}
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="absolute inset-0 h-full w-full object-cover"
-        style={{ opacity: status === "ready" || isLive ? 0.92 : 0 }}
-      />
-      <div aria-hidden className="grain pointer-events-none absolute inset-0" />
+      {/* === Camera (mobile: fullscreen; desktop: contained left panel) === */}
+      <div className="absolute inset-0 flex md:items-center md:justify-center md:p-8 md:pt-24 md:pb-44">
+        <div className="relative h-full w-full md:max-w-[1100px] md:grid md:grid-cols-[minmax(0,1fr)_360px] md:gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          {/* === Camera column === */}
+          <div className="relative h-full w-full overflow-hidden md:rounded-2xl md:ring-1 md:ring-inset md:ring-[var(--hairline-strong)]">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ opacity: status === "ready" || isLive ? 0.92 : 0 }}
+            />
+            <div aria-hidden className="grain pointer-events-none absolute inset-0" />
 
-      {/* === Top scrim === */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32"
-        style={{ background: "var(--scrim-top)" }}
-      />
+            {/* Top scrim (mobile only — desktop has solid bg) */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32 md:hidden"
+              style={{ background: "var(--scrim-top)" }}
+            />
 
-      {/* === Corner guides === */}
-      <span className="corner-guide tl" />
-      <span className="corner-guide tr" />
-      <span className="corner-guide bl" />
-      <span className="corner-guide br" />
+            {/* Corner guides */}
+            <span className="corner-guide tl" />
+            <span className="corner-guide tr" />
+            <span className="corner-guide bl" />
+            <span className="corner-guide br" />
 
-      {/* === Center focus circle (fade out when caption is showing or visual is up) === */}
-      {isLive && !aiCaption && !userCaption && !visual && (
-        <span className="focus-circle" />
-      )}
+            {/* Center focus circle */}
+            {isLive && !aiCaption && !userCaption && !visual && (
+              <span className="focus-circle" />
+            )}
+
+            {/* === Voice wave bars (mid screen) === */}
+            {isLive && (
+              <div className="pointer-events-none absolute inset-x-0 top-[34%] z-15 flex justify-center md:top-[28%]">
+                {renderVoiceBars(12)}
+              </div>
+            )}
+
+            {/* === Voice hints when idle === */}
+            {showHints && (
+              <div className="pointer-events-none absolute inset-x-0 top-[48%] z-15 flex flex-col items-center gap-2 px-6">
+                <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/55">
+                  prueba decir
+                </span>
+                <span
+                  key={hintIndex}
+                  className="caption-line caption-box max-w-[34ch] rounded-full px-4 py-2 text-center font-display text-[15px] font-semibold text-white md:text-[17px]"
+                >
+                  {VOICE_HINTS[hintIndex]}
+                </span>
+              </div>
+            )}
+
+            {/* === Captions === */}
+            {(userCaption || aiCaption) && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-[200px] z-15 flex flex-col items-center gap-2 px-6 md:bottom-6">
+                {userCaption && (
+                  <div className="caption-box caption-line max-w-[28ch] rounded-lg px-3 py-2 text-center font-mono text-[11px] uppercase tracking-[0.18em] text-white/80">
+                    {userCaption.trim()}
+                  </div>
+                )}
+                {aiCaption && (
+                  <div
+                    key={aiCaption.length}
+                    className="caption-box caption-line max-w-[42ch] rounded-lg px-4 py-2.5 text-center text-[14px] font-medium leading-snug text-white md:text-[16px]"
+                  >
+                    {aiCaption.trim()}
+                    <span className="caret" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* === Sidebar (desktop only) === */}
+          <aside className="hidden flex-col gap-4 overflow-hidden md:flex">
+            <DesktopSidebar
+              isLive={isLive}
+              userCaption={userCaption}
+              aiCaption={aiCaption}
+              memories={memories}
+              onMemoryClick={(m) => {
+                setMemoriesOpen(true);
+                setActiveMemory(m);
+                speakMemory(m);
+              }}
+              onOpenGallery={() => setMemoriesOpen(true)}
+            />
+          </aside>
+        </div>
+      </div>
 
       {/* === Top nav === */}
-      <header className="absolute inset-x-0 top-0 z-20 flex items-start justify-between px-4 pt-5">
+      <header className="absolute inset-x-0 top-0 z-20 flex items-start justify-between px-4 pt-5 md:px-8 md:pt-6">
         <div className="flex items-center gap-2.5">
           <Link
             href="/"
-            className="grid h-8 w-8 place-items-center rounded-[10px] bg-white/8 backdrop-blur ring-1 ring-inset ring-white/15"
+            className="grid h-9 w-9 place-items-center rounded-[10px] bg-white/8 backdrop-blur ring-1 ring-inset ring-white/15"
             aria-label="Volver"
           >
             <IconArrowLeft size={16} stroke={2.25} />
@@ -717,12 +749,12 @@ export default function LivePage() {
           <div className="flex items-center gap-2">
             <span
               aria-hidden
-              className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-[var(--blue-400)] to-[var(--blue-700)] text-white"
+              className="grid h-8 w-8 place-items-center rounded-[8px] bg-[var(--blue-900)] text-white"
             >
-              <IconSparkles size={14} stroke={2.25} />
+              <SensLogo size={18} strokeWidth={7} />
             </span>
-            <span className="font-display text-[14px] font-semibold tracking-tight">
-              AccessLens
+            <span className="font-display text-[15px] font-semibold tracking-tight md:text-[17px]">
+              Sens
             </span>
           </div>
         </div>
@@ -730,6 +762,11 @@ export default function LivePage() {
           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.28em] text-white/85 backdrop-blur ring-1 ring-inset ring-white/15">
             <span className="live-dot" /> en vivo
           </span>
+          {isLive && (
+            <span className="hidden font-mono text-[10px] tabular-nums text-white/55 md:inline">
+              {formatTime(Math.min(elapsed, SESSION_LIMIT_SEC))}
+            </span>
+          )}
           <button
             onClick={() => setMemoriesOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.28em] text-white/85 backdrop-blur ring-1 ring-inset ring-white/15"
@@ -740,56 +777,9 @@ export default function LivePage() {
         </div>
       </header>
 
-      {/* === Active mode badge (top center) === */}
-      {isLive && activeMode && (
-        <div className="pointer-events-none absolute inset-x-0 top-20 z-15 flex justify-center">
-          <div className="reveal flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 backdrop-blur ring-1 ring-inset ring-white/25">
-            {(() => {
-              const chip = MODE_CHIPS.find((c) => c.id === activeMode)!;
-              const I = chip.Icon;
-              return (
-                <>
-                  <I size={12} stroke={2.25} />
-                  <span className="font-display text-[11px] font-bold uppercase tracking-[0.2em]">
-                    {chip.label} activo
-                  </span>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* === Voice wave bars (mid-screen, fades in when active) === */}
+      {/* === Mobile session timer === */}
       {isLive && (
-        <div className="pointer-events-none absolute inset-x-0 top-[36%] z-15 flex justify-center">
-          {renderVoiceBars()}
-        </div>
-      )}
-
-      {/* === Caption box near bottom of camera area === */}
-      {(userCaption || aiCaption) && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[260px] z-15 flex flex-col items-center gap-2 px-6">
-          {userCaption && (
-            <div className="caption-box caption-line max-w-[28ch] rounded-lg px-3 py-2 text-center font-mono text-[11px] uppercase tracking-[0.18em] text-white/80">
-              {userCaption.trim()}
-            </div>
-          )}
-          {aiCaption && (
-            <div
-              key={aiCaption.length}
-              className="caption-box caption-line max-w-[34ch] rounded-lg px-4 py-2.5 text-center text-[13px] font-medium leading-snug text-white"
-            >
-              {aiCaption.trim()}
-              <span className="caret" />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* === Session timer (subtle, top-right area) === */}
-      {isLive && (
-        <div className="pointer-events-none absolute right-4 top-[60px] z-15">
+        <div className="pointer-events-none absolute right-4 top-[60px] z-15 md:hidden">
           <span
             className={`font-mono text-[10px] tabular-nums ${
               elapsed > SESSION_LIMIT_SEC - 15 ? "text-[var(--warn)]" : "text-white/55"
@@ -819,15 +809,15 @@ export default function LivePage() {
             <IconSparkles size={11} stroke={2.5} className="text-[var(--blue-400)]" />
             preflight
           </div>
-          <h2 className="reveal reveal-2 max-w-md text-center font-display text-[34px] font-black leading-[0.95] tracking-tight">
+          <h2 className="reveal reveal-2 max-w-md text-center font-display text-[34px] font-black leading-[0.95] tracking-tight md:text-[44px]">
             {status === "ready"
-              ? "Todo listo. Habla y AccessLens responde."
+              ? "Todo listo. Habla y Sens responde."
               : "Activa cámara y micrófono"}
           </h2>
-          <p className="reveal reveal-3 mt-3 max-w-md text-center text-[14px] leading-snug text-white/65">
+          <p className="reveal reveal-3 mt-3 max-w-md text-center text-[14px] leading-snug text-white/65 md:text-[16px]">
             {status === "ready"
-              ? "Pídele que describa, lea, dibuje, te lleve a un lugar o guarde memorias."
-              : "AccessLens necesita ver y oír para asistirte. Tus datos no se guardan."}
+              ? "Sens entiende tu voz y decide qué hacer: describir, leer, encontrar lugares, guardar memorias o llamar."
+              : "Sens necesita ver y oír para asistirte. Tus datos no se guardan en la nube."}
           </p>
 
           <div className="reveal reveal-4 mt-8 flex w-full max-w-md flex-col gap-3">
@@ -848,7 +838,7 @@ export default function LivePage() {
                 onClick={() => startSession()}
                 className="flex h-14 items-center justify-between rounded-2xl bg-[var(--blue-600)] px-5 text-white shadow-[0_8px_28px_-8px_rgba(37,99,235,0.65)] transition active:scale-[0.99]"
               >
-                <span className="font-display text-[17px] font-bold">Iniciar sesión Live</span>
+                <span className="font-display text-[17px] font-bold">Iniciar sesión</span>
                 <IconPlayerPlayFilled size={18} />
               </button>
             )}
@@ -879,8 +869,8 @@ export default function LivePage() {
 
       {/* === Visual overlay === */}
       {visual && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[var(--bg)]/95 px-4">
-          <div className="card relative w-full max-w-md overflow-hidden">
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[var(--bg)]/95 px-4 py-8">
+          <div className="card relative w-full max-w-md overflow-hidden md:max-w-2xl">
             <img
               src={`data:${visual.mimeType};base64,${visual.dataBase64}`}
               alt="Visual generado"
@@ -924,102 +914,59 @@ export default function LivePage() {
         </div>
       )}
 
-      {/* === BOTTOM PANEL === */}
+      {/* === BOTTOM CONTROLS === */}
       <footer
-        className="absolute inset-x-0 bottom-0 z-20 px-3 pb-4 pt-3"
+        className="absolute inset-x-0 bottom-0 z-20 px-4 pb-5 pt-3 md:px-8 md:pb-6"
         style={{ background: "var(--bg-overlay)", backdropFilter: "blur(12px)" }}
       >
-        <div className="mx-auto max-w-[420px]">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/45">
-              modo
-            </span>
-            {isLive && (
-              <button
-                onClick={() => stopAll()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.28em] text-white/55 ring-1 ring-inset ring-white/10"
-              >
-                <IconPlayerStopFilled size={9} className="text-[var(--warn)]" />
-                detener
-              </button>
+        <div className="mx-auto flex max-w-[480px] items-center justify-between md:max-w-[1100px]">
+          <button
+            disabled={!isLive}
+            onClick={() => setSettingsOpen(true)}
+            className="grid h-12 w-12 place-items-center rounded-full bg-white/8 text-white/85 ring-1 ring-inset ring-white/15 transition disabled:opacity-30 active:bg-white/15 md:h-14 md:w-14"
+            aria-label="Ajustes"
+          >
+            <IconSettings size={20} stroke={1.85} />
+          </button>
+
+          <button
+            disabled={!isLive}
+            onClick={() => setMuted((m) => !m)}
+            className={`relative grid h-[78px] w-[78px] place-items-center rounded-full transition disabled:opacity-30 active:scale-[0.97] md:h-[88px] md:w-[88px] ${
+              muted ? "bg-[var(--warn)] text-white" : "bg-white text-[var(--bg)]"
+            }`}
+            aria-label={muted ? "Activar mic" : "Silenciar mic"}
+          >
+            {!muted && isLive && <span className="halo" aria-hidden />}
+            {muted ? (
+              <IconMicrophoneOff size={32} stroke={2} />
+            ) : (
+              <IconMicrophone size={32} stroke={2} />
             )}
-          </div>
+          </button>
 
-          {/* === 4 mode chips === */}
-          <div className="grid grid-cols-4 gap-2">
-            {MODE_CHIPS.map((chip) => {
-              const Icon = chip.Icon;
-              const isActive = activeMode === chip.id;
-              return (
-                <button
-                  key={chip.id}
-                  disabled={!isLive}
-                  onClick={() => selectMode(chip.id)}
-                  className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl py-3 text-center transition disabled:opacity-30 ${
-                    isActive
-                      ? "bg-white/12 text-white ring-1 ring-inset ring-white/55"
-                      : "bg-white/5 text-white/85 ring-1 ring-inset ring-white/10 active:bg-white/10"
-                  }`}
-                >
-                  <Icon size={20} stroke={1.85} />
-                  <span className="font-display text-[11px] font-bold tracking-wide">
-                    {chip.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* === Mic + side actions === */}
-          <div className="mt-3 flex items-center justify-between gap-3 px-2">
-            <button
-              disabled={!isLive}
-              onClick={() => setSettingsOpen(true)}
-              className="grid h-11 w-11 place-items-center rounded-full bg-white/5 text-white/75 ring-1 ring-inset ring-white/10 transition disabled:opacity-30 active:bg-white/10"
-              aria-label="Ajustes"
-            >
-              <IconSettings size={18} stroke={1.85} />
-            </button>
-
-            <button
-              disabled={!isLive}
-              onClick={() => setMuted((m) => !m)}
-              className={`relative grid h-[68px] w-[68px] place-items-center rounded-full transition disabled:opacity-30 active:scale-[0.97] ${
-                muted ? "bg-[var(--warn)] text-white" : "bg-white text-[var(--bg)]"
-              }`}
-              aria-label={muted ? "Activar mic" : "Silenciar mic"}
-            >
-              {!muted && <span className="halo" aria-hidden />}
-              {muted ? (
-                <IconMicrophoneOff size={26} stroke={2} />
-              ) : (
-                <IconMicrophone size={26} stroke={2} />
-              )}
-            </button>
-
-            <button
-              disabled={!isLive}
-              onClick={flipCamera}
-              className="grid h-11 w-11 place-items-center rounded-full bg-white/5 text-white/75 ring-1 ring-inset ring-white/10 transition disabled:opacity-30 active:bg-white/10"
-              aria-label="Cambiar cámara"
-            >
-              <IconCameraRotate size={18} stroke={1.85} />
-            </button>
-          </div>
+          <button
+            disabled={!isLive || !!memorySaving}
+            onClick={() => void saveCurrentMoment()}
+            className="relative grid h-12 w-12 place-items-center rounded-full bg-[var(--blue-900)]/60 text-[var(--blue-300)] ring-1 ring-inset ring-[var(--hairline-strong)] transition disabled:opacity-30 active:bg-[var(--blue-700)]/60 md:h-14 md:w-14"
+            aria-label="Guardar momento"
+          >
+            <IconBookmarkPlus size={20} stroke={1.85} />
+          </button>
         </div>
       </footer>
 
       {/* === Settings sheet === */}
       {settingsOpen && (
         <div
-          className="absolute inset-0 z-50 flex items-end bg-black/55 backdrop-blur-sm"
+          className="absolute inset-0 z-50 flex items-end bg-black/55 backdrop-blur-sm md:items-center md:justify-center md:p-8"
           onClick={() => setSettingsOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full rounded-t-3xl bg-[var(--bg-card)] p-5 ring-1 ring-inset ring-[var(--hairline-strong)]"
+            className="w-full rounded-t-3xl bg-[var(--bg-card)] p-5 ring-1 ring-inset ring-[var(--hairline-strong)] md:max-w-md md:rounded-3xl"
           >
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" />
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15 md:hidden" />
             <h3 className="font-display text-[18px] font-black">Ajustes</h3>
             <div className="mt-4 space-y-2">
               <button
@@ -1042,13 +989,13 @@ export default function LivePage() {
               <button
                 onClick={() => {
                   setSettingsOpen(false);
-                  void saveCurrentMoment();
+                  void flipCamera();
                 }}
                 className="flex w-full items-center gap-2.5 rounded-xl bg-white/5 px-4 py-3 ring-1 ring-inset ring-[var(--hairline)]"
               >
-                <IconBookmarkPlus size={16} stroke={1.85} className="text-[var(--blue-300)]" />
+                <IconCameraRotate size={16} stroke={1.85} className="text-[var(--blue-300)]" />
                 <span className="font-display text-[14px] font-semibold">
-                  Guardar este momento
+                  Cambiar cámara
                 </span>
               </button>
               <button
@@ -1068,7 +1015,7 @@ export default function LivePage() {
       {/* === Memorias overlay === */}
       {memoriesOpen && (
         <div className="absolute inset-0 z-50 flex flex-col bg-[var(--bg)]">
-          <header className="flex items-center justify-between border-b border-[var(--hairline)] px-4 py-4">
+          <header className="flex items-center justify-between border-b border-[var(--hairline)] px-4 py-4 md:px-8">
             <button
               onClick={() => {
                 setMemoriesOpen(false);
@@ -1084,7 +1031,7 @@ export default function LivePage() {
               <span className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/55">
                 galería
               </span>
-              <h2 className="font-display text-[16px] font-black tracking-tight">
+              <h2 className="font-display text-[16px] font-black tracking-tight md:text-[18px]">
                 Mis memorias
               </h2>
             </div>
@@ -1093,11 +1040,11 @@ export default function LivePage() {
             </span>
           </header>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8">
             {!activeMemory && isLive && (
               <button
                 onClick={() => void saveCurrentMoment()}
-                className="mb-4 flex w-full items-center gap-3 rounded-2xl bg-[var(--blue-600)] px-4 py-3.5 text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.55)] transition active:scale-[0.99]"
+                className="mb-4 flex w-full max-w-2xl mx-auto items-center gap-3 rounded-2xl bg-[var(--blue-600)] px-4 py-3.5 text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.55)] transition active:scale-[0.99]"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/20">
                   <IconBookmarkPlus size={18} stroke={2} />
@@ -1117,13 +1064,15 @@ export default function LivePage() {
               <div className="flex h-[60vh] flex-col items-center justify-center px-8 text-center text-white/45">
                 <IconBookmark size={48} stroke={1.5} className="text-white/25" />
                 <p className="mt-4 max-w-xs font-display text-[15px] leading-snug">
-                  Aún no tienes memorias. Toca <span className="text-[var(--blue-300)]">Guardar este momento</span> para empezar.
+                  Aún no tienes memorias. Toca{" "}
+                  <span className="text-[var(--blue-300)]">Guardar este momento</span>{" "}
+                  para empezar.
                 </p>
               </div>
             )}
 
             {memories.length > 0 && !activeMemory && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5">
                 {memories.map((m) => {
                   const date = new Date(m.timestamp);
                   return (
@@ -1161,7 +1110,7 @@ export default function LivePage() {
             )}
 
             {activeMemory && (
-              <div className="mx-auto max-w-md">
+              <div className="mx-auto max-w-2xl">
                 <button
                   onClick={() => {
                     setActiveMemory(null);
@@ -1179,13 +1128,13 @@ export default function LivePage() {
                     className="block w-full"
                   />
                 </div>
-                <h3 className="mt-5 font-display text-[22px] font-black leading-tight">
+                <h3 className="mt-5 font-display text-[22px] font-black leading-tight md:text-[26px]">
                   {activeMemory.label}
                 </h3>
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.28em] text-white/55">
                   {new Date(activeMemory.timestamp).toLocaleString()}
                 </p>
-                <p className="mt-4 text-[14px] leading-relaxed text-white/85">
+                <p className="mt-4 text-[14px] leading-relaxed text-white/85 md:text-[15px]">
                   {activeMemory.description}
                 </p>
                 <div className="mt-6 flex gap-3">
@@ -1210,5 +1159,109 @@ export default function LivePage() {
         </div>
       )}
     </main>
+  );
+}
+
+/* === Desktop sidebar — conversation log + recent memories === */
+function DesktopSidebar({
+  isLive,
+  userCaption,
+  aiCaption,
+  memories,
+  onMemoryClick,
+  onOpenGallery,
+}: {
+  isLive: boolean;
+  userCaption: string;
+  aiCaption: string;
+  memories: Memory[];
+  onMemoryClick: (m: Memory) => void;
+  onOpenGallery: () => void;
+}) {
+  return (
+    <div className="flex h-full flex-col gap-4 overflow-hidden">
+      {/* Conversation panel */}
+      <div className="card flex flex-1 min-h-0 flex-col p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/55">
+            conversación
+          </span>
+          {isLive && (
+            <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.28em] text-white/65">
+              <span className="live-dot" />
+              activa
+            </span>
+          )}
+        </div>
+        <div className="flex-1 space-y-4 overflow-y-auto">
+          {!userCaption && !aiCaption && (
+            <div className="flex h-full flex-col items-center justify-center text-center text-white/40">
+              <IconMicrophone size={32} stroke={1.5} className="text-white/25" />
+              <p className="mt-3 max-w-[26ch] font-display text-[14px] leading-tight">
+                Cuando hables, tu conversación con Sens aparecerá aquí.
+              </p>
+            </div>
+          )}
+          {userCaption && (
+            <div>
+              <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-white/45">
+                tú
+              </span>
+              <p className="mt-1 text-[14px] leading-snug text-white/80">
+                {userCaption.trim()}
+              </p>
+            </div>
+          )}
+          {aiCaption && (
+            <div>
+              <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--blue-300)]">
+                sens
+              </span>
+              <p className="mt-1 text-[15px] font-medium leading-snug text-white">
+                {aiCaption.trim()}
+                <span className="caret" />
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Memorias preview */}
+      <div className="card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/55">
+            memorias recientes
+          </span>
+          <button
+            onClick={onOpenGallery}
+            className="font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--blue-300)] hover:text-[var(--blue-400)]"
+          >
+            ver todas
+          </button>
+        </div>
+        {memories.length === 0 ? (
+          <p className="text-[12px] leading-snug text-white/45">
+            Di &quot;guarda esto&quot; o toca el botón de bookmark para guardar
+            un frame.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {memories.slice(0, 3).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onMemoryClick(m)}
+                className="aspect-square overflow-hidden rounded-lg ring-1 ring-inset ring-[var(--hairline)] transition hover:ring-[var(--blue-500)]"
+              >
+                <img
+                  src={`data:${m.mimeType};base64,${m.imageBase64}`}
+                  alt={m.label}
+                  className="block h-full w-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
