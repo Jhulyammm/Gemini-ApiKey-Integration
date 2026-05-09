@@ -171,12 +171,14 @@ export default function LivePage() {
         await session.connect();
         sessionRef.current = session;
 
-        // Audio capture
+        // Audio capture — reuse the camera+mic MediaStream opened by requestPermissions
+        // (which already has echoCancellation: true). Opening a second getUserMedia call
+        // here was causing the speaker -> mic feedback that triggered server VAD interrupts.
         const capture = new AudioCapture((samples, level) => {
           setAudioLevel(level);
           if (!muted) sessionRef.current?.sendAudio(int16ToBase64(samples), level);
         });
-        await capture.start();
+        await capture.start(streamRef.current ?? undefined);
         capture.setMuted(muted);
         captureRef.current = capture;
 

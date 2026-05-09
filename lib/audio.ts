@@ -76,6 +76,7 @@ export class AudioCapture {
   private silentGain?: GainNode;
   private workletUrl?: string;
   private stream?: MediaStream;
+  private ownsStream = false;
   private muted = false;
   private readonly onChunk: AudioChunkHandler;
 
@@ -84,16 +85,23 @@ export class AudioCapture {
   }
 
   async start(stream?: MediaStream) {
-    this.stream =
-      stream ??
-      (await navigator.mediaDevices.getUserMedia({
+    if (stream) {
+      this.stream = stream;
+      this.ownsStream = false;
+    } else {
+      // Echo cancellation MUST be on. Without it the speaker's audio (Gemini's voice)
+      // bleeds back into the mic, the server VAD interprets it as the user interrupting,
+      // and the model cuts itself mid-sentence.
+      this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
+          echoCancellation: true,
+          noiseSuppression: true,
           autoGainControl: true,
           channelCount: 1,
         },
-      }));
+      });
+      this.ownsStream = true;
+    }
     const track = this.stream.getAudioTracks()[0];
     if (track) {
       const settings = track.getSettings();
@@ -194,7 +202,11 @@ export class AudioCapture {
     } catch {
       /* noop */
     }
-    this.stream?.getTracks().forEach((t) => t.stop());
+    // Only stop tracks if we created the stream ourselves; otherwise the parent
+    // (page.tsx) owns the camera+mic stream lifecycle.
+    if (this.ownsStream) {
+      this.stream?.getTracks().forEach((t) => t.stop());
+    }
     if (this.workletUrl) {
       URL.revokeObjectURL(this.workletUrl);
       this.workletUrl = undefined;

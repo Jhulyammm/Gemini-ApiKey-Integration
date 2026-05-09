@@ -1,6 +1,8 @@
 import {
   GoogleGenAI,
   Modality,
+  StartSensitivity,
+  EndSensitivity,
   type Session,
   type LiveServerMessage,
   type FunctionDeclaration,
@@ -60,6 +62,17 @@ export class LiveSession {
           this.init.tools && this.init.tools.length > 0
             ? [{ functionDeclarations: this.init.tools }]
             : undefined,
+        // Tame the server-side VAD so brief speaker bleed (echo from the device's
+        // own playback) doesn't trigger a barge-in interrupt. The user has to talk
+        // for ~1s of clean speech before we treat it as an interruption.
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+            prefixPaddingMs: 1000,
+            silenceDurationMs: 1500,
+          },
+        },
       },
       callbacks: {
         onopen: () => {
@@ -118,7 +131,10 @@ export class LiveSession {
   private handleMessage(msg: LiveServerMessage) {
     const sc = msg.serverContent;
     if (sc) {
-      if (sc.interrupted) this.events.onInterrupted?.();
+      if (sc.interrupted) {
+        console.warn("[live] server fired INTERRUPTED — model output cut. Likely VAD thinks user is talking (check echo cancellation / speaker bleed).");
+        this.events.onInterrupted?.();
+      }
 
       const inputText = sc.inputTranscription?.text;
       if (inputText) this.events.onInputTranscription?.(inputText);
