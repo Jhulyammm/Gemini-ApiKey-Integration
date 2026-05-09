@@ -99,12 +99,14 @@ export class LiveSession {
             silenceDurationMs: 1500,
           },
         },
-        // Session resumption: server periodically issues a `newHandle` we can use
-        // to reconnect later and continue the conversation without losing
+        // Session resumption: server periodically issues a `newHandle` we can
+        // use to reconnect later and continue the conversation without losing
         // context. Pass the previous handle in `init.resumeHandle` to restore.
+        // NOTE: `transparent: true` is a Vertex-only flag — the public Gemini
+        // API rejects it. Empty config is enough to enable handle issuance.
         sessionResumption: this.init.resumeHandle
-          ? { handle: this.init.resumeHandle, transparent: true }
-          : { transparent: true },
+          ? { handle: this.init.resumeHandle }
+          : {},
       },
       callbacks: {
         onopen: () => {
