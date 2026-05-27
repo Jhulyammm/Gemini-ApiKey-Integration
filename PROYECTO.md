@@ -578,7 +578,7 @@ PARTE 2 — SUGERENCIAS PARA CV
 
 ## 16. Bullets propuestos para CV técnico
 
-1. **Construí Sens**, una PWA voz-primero de accesibilidad sobre **Google Gemini Live API**, integrando 3 modelos Gemini orquestados (`gemini-3.1-flash-live-preview` para conversación bidireccional, `gemini-3-pro-preview` para vision/OCR y Search grounding), con **session resumption + goAway preemption** para sortear el límite de 2 min y lograr conversaciones indefinidas.
+1. **Construí Sens** — PWA voz-primero de accesibilidad sobre **Google Gemini Live API** que **ganó la categoría "Best Use of the Gemini API"** en HackDays by Roborregos 2026 (Tec de Monterrey). Integré 3 modelos Gemini orquestados (`gemini-3.1-flash-live-preview` para conversación bidireccional, `gemini-3-pro-preview` para vision/OCR y Search grounding), con **session resumption + goAway preemption** para sortear el límite de 2 min y lograr conversaciones indefinidas.
 
 2. **Implementé un pipeline de audio multimodal cross-browser**: AudioWorklet inline cargado vía Blob URL (compat iOS Safari 16+, donde `ScriptProcessorNode` falla silenciosamente), resampleo lineal client-side entre rate nativo del device y los formatos PCM 16 kHz / 24 kHz que requiere Gemini Live, y un **mic gate state machine** anti-echo loop con drain timer post-turn que previene el barge-in espurio del VAD del servidor.
 
@@ -586,11 +586,11 @@ PARTE 2 — SUGERENCIAS PARA CV
 
 ## 17. Bullets propuestos para CV de impacto
 
-1. **Lideré el desarrollo end-to-end** de un asistente de accesibilidad por voz para **personas con baja visión, sordera y dislexia**, entregando una experiencia donde el usuario abre una URL, habla, y la IA describe escenas, lee y traduce texto en 97 idiomas, orienta con búsqueda real (Google Search grounding) y guarda memorias persistentes con descripción detallada — sin descargas, sin login, en una sola URL pública.
+1. **Gané la categoría "Best Use of the Gemini API"** en HackDays by Roborregos 2026 (hackatón presencial del Tec de Monterrey, mayo 2026) liderando el desarrollo end-to-end de un asistente de accesibilidad por voz para **personas con baja visión, sordera y dislexia** — el usuario abre una URL, habla, y la IA describe escenas, lee y traduce texto en 97 idiomas, orienta con búsqueda real (Google Search grounding) y guarda memorias persistentes con descripción detallada.
 
-2. **Sorteé limitaciones críticas del API** que invalidaban casos de uso reales: el hard limit de 2 minutos por sesión (que cortaba conversaciones a mitad de una receta médica) lo resolví con session resumption + goAway preempt; el echo loop entre speaker y mic (que cortaba al modelo a media frase) lo eliminé con una defensa de 3 capas (echo cancellation + VAD relajado + mic gate client-side).
+2. **Sorteé limitaciones críticas del API** que invalidaban casos de uso reales: el hard limit de 2 minutos por sesión (que cortaba conversaciones a mitad de una receta médica) lo resolví con session resumption + goAway preempt; el echo loop entre speaker y mic (que cortaba al modelo a media frase) lo eliminé con una defensa de 3 capas (echo cancellation + VAD relajado + mic gate client-side). Estas decisiones técnicas fueron las que diferenciaron a Sens del resto de submissions del reto.
 
-3. **Entregué un proyecto completo en un sprint de un día** (28 commits, 2 768 LOC TS, 6 docs de handoff): app funcional en producción, documentación operacional (`README`, `EQUIPO`, `DEPLOY`, `DEVPOST`, `DEMO`, `PITCH`) y scripts de diagnóstico para que cualquier miembro del equipo pudiera continuar el trabajo sin contexto previo.
+3. **Entregué un proyecto completo en un sprint presencial de un día** (28 commits, 2 768 LOC TS, 6 docs de handoff): app funcional en producción, documentación operacional (`README`, `EQUIPO`, `DEPLOY`, `DEVPOST`, `DEMO`, `PITCH`) y scripts de diagnóstico — siendo el dueño de >90 % del código y 100 % de la arquitectura técnica en un equipo de 4 personas.
 
 ═══════════════════════════════════════════════════
 PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
@@ -629,9 +629,9 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 - **$ generado / ahorrado**: N/A (proyecto sin modelo de negocio activado).
 - **Tiempo en producción real**: desde **2026-05-09** (día del hackatón).
 - **Adopción / engagement**: — (sin tracking).
-- **Submission a DevPost**: **enviada y registrada** en la plataforma. **Sin feedback** del juicio devuelto al equipo.
+- **Submission a DevPost**: **enviada y registrada** en la plataforma.
 - **Demo video**: **no se produjo**. Decisión deliberada del equipo — el pitch en vivo + la demo en producción cubrieron el rol del video. `DEMO.md` quedó como guion no ejecutado, sirve como referencia técnica para futuro.
-- **Premio o reconocimiento**: PENDIENTE de actualizar cuando se anuncie el resultado del juicio.
+- **Premio o reconocimiento**: **🏆 GANAMOS la categoría "Best Use of the Gemini API"** en HackDays by Roborregos 2026 (Tec de Monterrey, 9 de mayo de 2026). El premio fue el reconocimiento oficial del hackatón + un detalle simbólico — no hubo premio económico significativo, pero **la categoría era la única dedicada al reto de Gemini API y ganarla valida la ejecución técnica del proyecto**.
 - **Testimonios / impacto cualitativo**: — (sin recopilar).
 - **Otra métrica que importe**:
   - **28 commits en un solo día (9 de mayo de 2026)** — capacidad de ejecución bajo presión en hackatón presencial.

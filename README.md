@@ -2,11 +2,12 @@
 
 **Tus ojos, oídos y guía con IA en vivo. En 97 idiomas. Sin descargar nada.**
 
+> 🏆 **Ganador de la categoría "Best Use of the Gemini API"** en [HackDays by Roborregos 2026](https://hackdays-by-roborregos-2026.devpost.com/) (Tec de Monterrey, mayo 2026).
+
 Sens es una PWA de accesibilidad voz-primero construida sobre **Google Gemini Live API**. Apuntás la cámara del celular, hablás, y Sens ve, escucha y te responde con voz natural en tu idioma — detectando automáticamente entre 97.
 
 Pensada para personas con baja visión, sordera, dislexia, o cualquiera que necesita orientación en un espacio nuevo o en otro idioma.
 
-> Hackatón: **Best Use of the Google Gemini API**.
 > Stack: Next.js 16 · React 19 · Tailwind v4 · Gemini Live + Gemini 3 Pro + Google Search grounding.
 > Demo público: https://gemini-api-key-integration.vercel.app
 
