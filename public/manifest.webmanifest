@@ -1,12 +1,12 @@
 {
-  "name": "AccessLens",
-  "short_name": "AccessLens",
+  "name": "Sens",
+  "short_name": "Sens",
   "description": "Tus ojos, oídos y guía con IA en vivo",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#080c14",
+  "theme_color": "#080c14",
   "icons": [
     {
       "src": "/icon.svg",

@@ -17,7 +17,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Sens — Tus ojos, oídos y guía con IA en vivo",
   description:
-    "Asistente de accesibilidad por voz en tiempo real con Gemini Live. Describe escenas, traduce 97 idiomas, guarda memorias y llama por ti.",
+    "Asistente de accesibilidad por voz en tiempo real con Gemini Live. Describe escenas, traduce en 97 idiomas, interpreta el contexto, orienta con búsqueda real y guarda memorias persistentes.",
   applicationName: "Sens",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -45,7 +45,7 @@ export default function RootLayout({
       lang="es"
       className={`${display.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-[var(--background)] text-[var(--foreground)] font-display">
+      <body className="min-h-full bg-[var(--bg)] text-[var(--foreground)] font-display">
         {children}
       </body>
     </html>
