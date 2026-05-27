@@ -712,7 +712,9 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 - **Repo (público)**: https://github.com/Jhulyammm/sens — licencia MIT.
 - **Deploy / app live**: https://gemini-api-key-integration.vercel.app (URL del deploy original; el repo se renombró a `sens` pero el dominio Vercel mantiene el nombre viejo, sigue funcional).
 - **Hackatón — página oficial**: https://hackdays-by-roborregos-2026.devpost.com/ — HackDays by Roborregos 2026 (Tec de Monterrey).
-- **Submission DevPost del proyecto Sens**: **enviada, registrada y reconocida como ganadora** (badge "WINNER" visible en la tarjeta del proyecto en DevPost). URL directa del proyecto: PENDIENTE — agregar cuando se tenga.
+- **Submission DevPost del proyecto Sens**: **enviada, registrada y reconocida como ganadora** (badge "WINNER" visible en la tarjeta del proyecto en DevPost).
+- **URL directa del proyecto en DevPost**: https://devpost.com/software/sense-2uk3sf
+  - Nota: el slug es `sense-2uk3sf` (con "e" al final) porque el proyecto se sometió originalmente como "Sense" antes del rebrand a "Sens". DevPost no actualiza el slug aunque se renombre el proyecto en la UI. Cosmético — el badge WINNER y el nombre visible "Sens" están correctos.
 - **Demo video**: **no se produjo** (decisión deliberada del equipo). El script de referencia quedó en `DEMO.md` por si en el futuro se decide grabar uno.
 - **Screenshots / capturas**: pendientes de tomar para portfolio personal.
 - **Artículos / posts sobre el proyecto**: — (oportunidad post-hackatón: escribir un post técnico sobre "Cómo conseguir sesiones indefinidas en Gemini Live API con session resumption + goAway preempt" para portfolio personal / Medium / dev.to).
