@@ -598,40 +598,46 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 
 ## 18. Mi rol y equipo
 
-> Autocompletado desde git log + contexto del chat. Validar y ajustar antes de publicar en cualquier surface (CV, LinkedIn, portfolio).
-
 - **¿Solo o en equipo? Tamaño del equipo**: Equipo de **4 personas** para el hackatón.
-- **Mi rol específico**: **Lead developer full-stack**. Responsable de la arquitectura técnica completa, integración con Gemini Live API, pipeline de audio (AudioWorklet + resampling + mic gate), session resumption, deploy a Vercel, y toda la documentación operacional del equipo (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
-- **% del trabajo que fue mío (aprox.)**: **~93 %** medido por commits (26 de 28 en git log). En LOC y decisiones de arquitectura, prácticamente 100 %.
+- **Mi rol específico**: **Lead developer full-stack y arquitecto del proyecto**. Responsable de la totalidad de la arquitectura técnica, la integración con Gemini Live API, el pipeline de audio (AudioWorklet + resampling + mic gate anti-echo), session resumption + goAway preempt para conversaciones indefinidas, deploy a Vercel, y toda la documentación operacional del equipo (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
+- **% del trabajo que fue mío (aprox.)**: **>90 % de la programación**. En commits es ~93 % (26 de 28). En LOC y decisiones de arquitectura, prácticamente 100 %.
 - **Personas clave con quienes trabajé**:
-  - **Joshua Ricardo Ortiz Escobar** — colaboró con el merge inicial de archivos del proyecto y con la rotación de la API key expuesta. Iba a manejar el deploy a Vercel; al final lo retomó Jhulyam.
-  - **2 compañeros más del equipo del hackatón** (sin commits directos en main). Roles en el pitch: storyteller (P1), demo lead (P2), tech expert (P3 = Jhulyam), closer/visión (P4). Ajustar nombres al validar.
-- **Reporté a / colaboré con**: Equipo de hackatón horizontal, sin manager. Coordinación con el resto del equipo para el pitch y la grabación del demo video.
+  - **Santiago Leyton** — trabajó en la preparación del pitch.
+  - **Emiliano Rojas** — trabajó en la preparación del pitch.
+  - **Joshua Ricardo Ortiz Escobar** — 2 commits de housekeeping (merge inicial de archivos del proyecto y rotación de la API key que había quedado expuesta en `api.py`).
+- **División real del trabajo**:
+  - **Jhulyam**: programación (>90 %), arquitectura, debugging, documentación, deploy.
+  - **Santiago + Emiliano**: preparación de la presentación / pitch.
+  - **Joshua**: housekeeping puntual del repo.
+- **Reporté a / colaboré con**: Equipo horizontal del hackatón, sin manager. Coordinación principalmente para el pitch en vivo.
 
 ## 19. Cliente / contexto / NDA
 
-- **Cliente o contexto del proyecto**: **Hackatón "Best Use of the Google Gemini API"** (mayo 2026). Proyecto propio del equipo, sin cliente externo, sin contrato.
+- **Cliente o contexto del proyecto**: **HackDays by Roborregos 2026** — hackatón presencial organizado por **Roborregos**, grupo estudiantil del **Tec de Monterrey**, en **Monterrey, NL, México**, el **9 de mayo de 2026**. El reto en el que participamos fue patrocinado por **Google Gemini** y se llamaba **"Best Use of the Gemini API"** (única categoría — no había sub-categorías).
+- **Página oficial del evento**: https://hackdays-by-roborregos-2026.devpost.com/
 - **¿Qué puedo mencionar públicamente?**:
-  - **Cliente**: N/A (sin cliente). Puedo mencionar el nombre del hackatón libremente.
+  - **Cliente / organizador**: SÍ — Roborregos / Tec de Monterrey. Puedo mencionar el hackatón con su nombre completo.
+  - **Patrocinador del reto**: SÍ — Google Gemini.
   - **Números**: SÍ. Todo el código y métricas están en el repo público.
   - **Código**: SÍ se puede mostrar. Repo público en `github.com/Jhulyammm/sens`, licencia MIT.
-- **Si no puedo mencionar al cliente, ¿cómo lo describimos genéricamente?**: N/A — proyecto personal de hackatón, sin restricciones.
+- **Si no puedo mencionar al cliente, ¿cómo lo describimos genéricamente?**: N/A — sin restricciones de mención.
 
 ## 20. Resultados y métricas que solo yo conozco
 
-> Pendientes hasta después del juicio del hackatón. Volver y completar cuando haya datos reales.
-
-- **Usuarios reales servidos**: — (aún sin métricas; URL pública recién deployada).
-- **Volumen procesado**: — (sin telemetría implementada todavía).
+- **Usuarios reales servidos**: — (sin métricas de uso; URL pública sin tracking implementado).
+- **Volumen procesado**: — (sin telemetría).
 - **$ generado / ahorrado**: N/A (proyecto sin modelo de negocio activado).
 - **Tiempo en producción real**: desde **2026-05-09** (día del hackatón).
 - **Adopción / engagement**: — (sin tracking).
-- **Premio o reconocimiento**: PENDIENTE del juicio del hackatón. Categorías a las que se aspira: **Best Use of the Google Gemini API**. Llenar el resultado aquí cuando se anuncie.
-- **Testimonios / impacto cualitativo**: — (recopilar después de la demo pública).
+- **Submission a DevPost**: **enviada y registrada** en la plataforma. **Sin feedback** del juicio devuelto al equipo.
+- **Demo video**: **no se produjo**. Decisión deliberada del equipo — el pitch en vivo + la demo en producción cubrieron el rol del video. `DEMO.md` quedó como guion no ejecutado, sirve como referencia técnica para futuro.
+- **Premio o reconocimiento**: PENDIENTE de actualizar cuando se anuncie el resultado del juicio.
+- **Testimonios / impacto cualitativo**: — (sin recopilar).
 - **Otra métrica que importe**:
-  - **28 commits en un solo día** — capacidad de ejecución bajo presión.
-  - **6 docs operacionales** entregados (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
-  - **2 768 LOC** de TypeScript estricto, build limpio, cero warnings.
+  - **28 commits en un solo día (9 de mayo de 2026)** — capacidad de ejecución bajo presión en hackatón presencial.
+  - **>90 % del código fui yo** — ownership técnico completo del proyecto.
+  - **6 docs operacionales** entregados al equipo (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
+  - **2 768 LOC** de TypeScript estricto con `strict: true`, build limpio, cero warnings.
 
 ## 21. Cambios y mejoras que estoy haciendo o quiero hacer
 
@@ -664,15 +670,17 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 
 ## 22. Proyecciones / visión futura
 
-- **Visión a 6-12 meses**: Sens evoluciona de demo de hackatón a producto utilizable de accesibilidad por voz. Foco en estabilidad (tests + monitoring), expansión de capacidades (subtítulos en vivo para sordera, modo cuidador para familias) y validación con usuarios reales con baja visión / dislexia / sordera. App nativa opcional con shortcuts del SO.
-- **¿Es comercializable? ¿Modelo de negocio si aplica?**: SÍ, hay tres rutas claras:
-  - **B2C freemium**: gratis con cap de minutos diarios de Live API; premium ($5-10/mes) para uso ilimitado + memorias en cloud.
-  - **B2B**: licenciar a hospitales, museos, aeropuertos, universidades para que ofrezcan accesibilidad sin construirla. $X 000/año por institución.
-  - **Distribución gratuita** vía partnerships con instituciones de personas con discapacidad (ONCE, organizaciones latinoamericanas), sponsoreado por Google o foundations.
-- **¿Open source? ¿Producto? ¿Side project para siempre?**: Producción dual:
-  - **Open source** (MIT) la base técnica como referencia para otros que quieran construir sobre Gemini Live API.
-  - **Producto cerrado** las features de cloud/sync/modo cuidador.
-  - Si el hackatón no abre puertas concretas → side project mantenible con CI mínima y deploy semi-automatizado.
+**Intención declarada**: monetizar y escalar Sens más allá del hackatón.
+
+- **Visión a 6-12 meses**: Sens evoluciona de demo de hackatón a producto utilizable de accesibilidad por voz. Foco en estabilidad (tests + monitoring), expansión de capacidades (subtítulos en vivo para sordera, modo cuidador para familias) y validación con usuarios reales con baja visión, dislexia y sordera. App nativa opcional con shortcuts del SO.
+- **¿Es comercializable? ¿Modelo de negocio si aplica?**: SÍ — el plan considera tres rutas paralelas:
+  - **B2C freemium**: gratis con cap de minutos diarios de Live API; premium ($5-10/mes) para uso ilimitado + memorias en cloud + sync entre devices.
+  - **B2B**: licenciar a hospitales, museos, aeropuertos, universidades para que ofrezcan accesibilidad sin construirla. Pricing por institución.
+  - **Partnerships institucionales** con organizaciones de personas con discapacidad (ONCE en España, organizaciones latinoamericanas equivalentes) — distribución subsidiada por sponsors (Google for Startups, foundations).
+- **¿Open source? ¿Producto? ¿Side project para siempre?**: Estrategia **dual**:
+  - **Open source** (MIT) la base técnica como referencia para otros que quieran construir sobre Gemini Live API. Atrae contribuidores + posiciona técnicamente al equipo.
+  - **Producto cerrado** las features de cloud, sync entre devices, modo cuidador, integraciones con apps de salud.
+  - Decisión: NO es side project archivado. Se planea continuidad activa.
 - **Audiencia target si crece**: 1 300 millones de personas con alguna discapacidad visual, auditiva o cognitiva globalmente. Mercado inicial recomendado: Latinoamérica (donde el español es nativo y el mercado de accesibilidad está menos atendido). Sub-segmentos:
   - **Adultos mayores con baja visión** (~50M+ en LATAM): el demo de "leer la receta del doctor" resuena directo.
   - **Migrantes / turistas** que no leen el idioma local (~tens of millions).
@@ -699,19 +707,21 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 
 ## 24. Links y assets
 
-- **Repo (público o privado)**: https://github.com/Jhulyammm/sens — **público**, licencia MIT.
+- **Repo (público)**: https://github.com/Jhulyammm/sens — licencia MIT.
 - **Deploy / app live**: https://gemini-api-key-integration.vercel.app (URL del deploy original; el repo se renombró a `sens` pero el dominio Vercel mantiene el nombre viejo, sigue funcional).
-- **Demo video**: PENDIENTE — script completo en `DEMO.md`, shot list de 14 tomas, falta grabar y subir a YouTube como unlisted.
-- **Screenshots / capturas**: PENDIENTES — minimo 3-5 1080×1080 para galería DevPost (hero shot, memoria abierta, caption en vivo, galería de memorias, landing page).
-- **Artículos / posts sobre el proyecto**: — (no hay todavía; considerar escribir uno post-hackatón sobre "Cómo conseguir sesiones indefinidas en Gemini Live API" como contenido técnico para portfolio).
-- **Press / mentions**: PENDIENTES del juicio del hackatón.
+- **Hackatón — página oficial**: https://hackdays-by-roborregos-2026.devpost.com/ — HackDays by Roborregos 2026 (Tec de Monterrey).
+- **Submission DevPost**: **enviada y registrada**, sin feedback recibido.
+- **Demo video**: **no se produjo** (decisión deliberada del equipo). El script de referencia quedó en `DEMO.md` por si en el futuro se decide grabar uno.
+- **Screenshots / capturas**: pendientes de tomar para portfolio personal.
+- **Artículos / posts sobre el proyecto**: — (oportunidad post-hackatón: escribir un post técnico sobre "Cómo conseguir sesiones indefinidas en Gemini Live API con session resumption + goAway preempt" para portfolio personal / Medium / dev.to).
+- **Press / mentions**: — (sin difusión externa).
+- **Redes sociales del proyecto**: no hay (decisión: el repo público + DevPost son el único surface por ahora).
 - **Issue tracker**: https://github.com/Jhulyammm/sens/issues
-- **Submission DevPost**: PENDIENTE — texto completo en `DEVPOST.md`, falta enviar antes del deadline.
 - **Documentación interna del equipo** (todos en la raíz del repo):
   - [`README.md`](README.md) — producto + cómo correr.
   - [`EQUIPO.md`](EQUIPO.md) — onboarding completo del equipo (15 secciones).
   - [`DEPLOY.md`](DEPLOY.md) — guía Vercel paso a paso.
-  - [`DEVPOST.md`](DEVPOST.md) — submission ready-to-paste.
-  - [`DEMO.md`](DEMO.md) — guion del video.
+  - [`DEVPOST.md`](DEVPOST.md) — texto de submission ready-to-paste.
+  - [`DEMO.md`](DEMO.md) — guion de video (no ejecutado, referencia técnica).
   - [`PITCH.md`](PITCH.md) — preparación del pitch en vivo.
   - [`PROYECTO.md`](PROYECTO.md) — este documento, análisis técnico para segundo cerebro.
