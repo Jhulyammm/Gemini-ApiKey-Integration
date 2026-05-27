@@ -598,64 +598,120 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 
 ## 18. Mi rol y equipo
 
-- ¿Solo o en equipo? Tamaño del equipo:
-- Mi rol específico:
-- % del trabajo que fue mío (aprox.):
-- Personas clave con quienes trabajé:
-- Reporté a / colaboré con:
+> Autocompletado desde git log + contexto del chat. Validar y ajustar antes de publicar en cualquier surface (CV, LinkedIn, portfolio).
+
+- **¿Solo o en equipo? Tamaño del equipo**: Equipo de **4 personas** para el hackatón.
+- **Mi rol específico**: **Lead developer full-stack**. Responsable de la arquitectura técnica completa, integración con Gemini Live API, pipeline de audio (AudioWorklet + resampling + mic gate), session resumption, deploy a Vercel, y toda la documentación operacional del equipo (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
+- **% del trabajo que fue mío (aprox.)**: **~93 %** medido por commits (26 de 28 en git log). En LOC y decisiones de arquitectura, prácticamente 100 %.
+- **Personas clave con quienes trabajé**:
+  - **Joshua Ricardo Ortiz Escobar** — colaboró con el merge inicial de archivos del proyecto y con la rotación de la API key expuesta. Iba a manejar el deploy a Vercel; al final lo retomó Jhulyam.
+  - **2 compañeros más del equipo del hackatón** (sin commits directos en main). Roles en el pitch: storyteller (P1), demo lead (P2), tech expert (P3 = Jhulyam), closer/visión (P4). Ajustar nombres al validar.
+- **Reporté a / colaboré con**: Equipo de hackatón horizontal, sin manager. Coordinación con el resto del equipo para el pitch y la grabación del demo video.
 
 ## 19. Cliente / contexto / NDA
 
-- Cliente o contexto del proyecto:
-- ¿Qué puedo mencionar públicamente?:
-  - Cliente: [se puede / NO]
-  - Números: [se puede / NO]
-  - Código: [se puede mostrar / NO]
-- Si no puedo mencionar al cliente, ¿cómo lo describimos genéricamente?:
+- **Cliente o contexto del proyecto**: **Hackatón "Best Use of the Google Gemini API"** (mayo 2026). Proyecto propio del equipo, sin cliente externo, sin contrato.
+- **¿Qué puedo mencionar públicamente?**:
+  - **Cliente**: N/A (sin cliente). Puedo mencionar el nombre del hackatón libremente.
+  - **Números**: SÍ. Todo el código y métricas están en el repo público.
+  - **Código**: SÍ se puede mostrar. Repo público en `github.com/Jhulyammm/sens`, licencia MIT.
+- **Si no puedo mencionar al cliente, ¿cómo lo describimos genéricamente?**: N/A — proyecto personal de hackatón, sin restricciones.
 
 ## 20. Resultados y métricas que solo yo conozco
 
-- Usuarios reales servidos:
-- Volumen procesado:
-- $ generado / ahorrado:
-- Tiempo en producción real:
-- Adopción / engagement:
-- Premio o reconocimiento:
-- Testimonios / impacto cualitativo:
-- Otra métrica que importe:
+> Pendientes hasta después del juicio del hackatón. Volver y completar cuando haya datos reales.
+
+- **Usuarios reales servidos**: — (aún sin métricas; URL pública recién deployada).
+- **Volumen procesado**: — (sin telemetría implementada todavía).
+- **$ generado / ahorrado**: N/A (proyecto sin modelo de negocio activado).
+- **Tiempo en producción real**: desde **2026-05-09** (día del hackatón).
+- **Adopción / engagement**: — (sin tracking).
+- **Premio o reconocimiento**: PENDIENTE del juicio del hackatón. Categorías a las que se aspira: **Best Use of the Google Gemini API**. Llenar el resultado aquí cuando se anuncie.
+- **Testimonios / impacto cualitativo**: — (recopilar después de la demo pública).
+- **Otra métrica que importe**:
+  - **28 commits en un solo día** — capacidad de ejecución bajo presión.
+  - **6 docs operacionales** entregados (README, EQUIPO, DEPLOY, DEVPOST, DEMO, PITCH, PROYECTO).
+  - **2 768 LOC** de TypeScript estricto, build limpio, cero warnings.
 
 ## 21. Cambios y mejoras que estoy haciendo o quiero hacer
 
-- En proceso ahora:
-- Próximos 1-3 meses:
-- Backlog identificado:
-- Refactors pendientes:
-- Features deseadas:
+- **En proceso ahora**:
+  - Preparación del pitch en vivo de 3 minutos con el equipo (ver `PITCH.md` — estructura 4-personas con énfasis técnico).
+  - Grabación del demo video de 5 minutos (ver `DEMO.md` — shot list de 14 tomas, captions, fallback plan).
+  - Submission final a DevPost (ver `DEVPOST.md` — texto listo para pegar).
+- **Próximos 1-3 meses** (si se decide continuar post-hackatón):
+  - Renombrar `MEMORIES_KEY` de `accesslens:memories` a `sens:memories` con migración one-time.
+  - Centralizar nombres de modelos en `lib/models.ts`.
+  - Validación con Zod en `/api/memory` y `/api/nearby` + cap de tamaño de imagen.
+  - Implementar rate limiting (Upstash Redis + middleware Next.js).
+  - Telemetría mínima (Vercel Web Analytics o PostHog, cero PII).
+- **Backlog identificado** (priorizado en §15):
+  - Refactor de `app/live/page.tsx` en hooks + sub-componentes (mejora L, 3-5 días).
+  - Tests unitarios para `lib/audio.ts` y `lib/gemini-live.ts` (mejora M, 1-2 días).
+  - Error boundaries en React + UI de recovery.
+  - Sync opcional de Memorias a backend (Supabase + device ID, sin login).
+- **Refactors pendientes**:
+  - Cambiar `captureFrameJpegBase64` a usar un `<canvas>` singleton en lugar de crear uno nuevo cada segundo.
+  - Distinguir tipos de close en `onClose` (4xxx vs 1000) para mejor reconexión.
+  - Eliminar el `silentGain` workaround si Safari actualiza el comportamiento del AudioWorklet.
+- **Features deseadas** (roadmap de `EQUIPO.md`):
+  - **Subtítulos en vivo** — texto enorme en pantalla de cualquier conversación cercana, traducido al idioma del usuario. Killer feature para sordera.
+  - **Diario semanal narrado** — usar el long-context de Gemini sobre todas las memorias guardadas para generar un resumen de la semana.
+  - **App nativa** (Capacitor o Tauri) con widget de acceso rápido en iOS/Android.
+  - **Modo cuidador** — un familiar recibe un feed pasivo del audio descriptivo del usuario.
+  - **Integración Apple Health / Google Fit** — Sens detecta una receta y agenda el horario.
+  - **Modo emergencia** — frase activadora ("Sens, emergencia") que dispara grabación + descripción de escena + envío a contactos pre-configurados.
 
 ## 22. Proyecciones / visión futura
 
-- Visión a 6-12 meses:
-- ¿Es comercializable? ¿Modelo de negocio si aplica?:
-- ¿Open source? ¿Producto? ¿Side project para siempre?:
-- Audiencia target si crece:
-- Lo que sería necesario para escalarlo:
+- **Visión a 6-12 meses**: Sens evoluciona de demo de hackatón a producto utilizable de accesibilidad por voz. Foco en estabilidad (tests + monitoring), expansión de capacidades (subtítulos en vivo para sordera, modo cuidador para familias) y validación con usuarios reales con baja visión / dislexia / sordera. App nativa opcional con shortcuts del SO.
+- **¿Es comercializable? ¿Modelo de negocio si aplica?**: SÍ, hay tres rutas claras:
+  - **B2C freemium**: gratis con cap de minutos diarios de Live API; premium ($5-10/mes) para uso ilimitado + memorias en cloud.
+  - **B2B**: licenciar a hospitales, museos, aeropuertos, universidades para que ofrezcan accesibilidad sin construirla. $X 000/año por institución.
+  - **Distribución gratuita** vía partnerships con instituciones de personas con discapacidad (ONCE, organizaciones latinoamericanas), sponsoreado por Google o foundations.
+- **¿Open source? ¿Producto? ¿Side project para siempre?**: Producción dual:
+  - **Open source** (MIT) la base técnica como referencia para otros que quieran construir sobre Gemini Live API.
+  - **Producto cerrado** las features de cloud/sync/modo cuidador.
+  - Si el hackatón no abre puertas concretas → side project mantenible con CI mínima y deploy semi-automatizado.
+- **Audiencia target si crece**: 1 300 millones de personas con alguna discapacidad visual, auditiva o cognitiva globalmente. Mercado inicial recomendado: Latinoamérica (donde el español es nativo y el mercado de accesibilidad está menos atendido). Sub-segmentos:
+  - **Adultos mayores con baja visión** (~50M+ en LATAM): el demo de "leer la receta del doctor" resuena directo.
+  - **Migrantes / turistas** que no leen el idioma local (~tens of millions).
+  - **Personas con dislexia** (~10 % población general).
+  - **Personas con sordera** (futuro, cuando esté Subtítulos en vivo).
+- **Lo que sería necesario para escalarlo**:
+  - Backend con auth opcional (Supabase) para sync de memorias entre devices.
+  - Rate limiting + monitoring + alertas (Sentry, Vercel Analytics, costo de Gemini API por usuario).
+  - Tests + CI (GitHub Actions) para que el equipo pueda crecer sin romper.
+  - App nativa con offline-first parcial (TTS local cuando no hay red).
+  - Pricing tier negociado con Google Cloud para volumen.
+  - Localización de UI a inglés, portugués (LATAM mercado).
+  - Validación con usuarios reales: focus groups con personas con discapacidad para detectar friction puntos invisibles.
 
 ## 23. Contexto humano y lecciones
 
-- ¿Cómo surgió la idea?:
-- Momento más difícil del proyecto:
-- Decisión de la que estoy más orgulloso:
-- Decisión que cambiaría hoy:
-- Lección técnica más valiosa:
-- Lección de producto / negocio:
-- Anécdota memorable:
+- **¿Cómo surgió la idea?**: Hackatón "Best Use of the Google Gemini API". El insight central: Gemini Live recién había lanzado audio + video streaming en un solo WebSocket. Nadie estaba usándolo para accesibilidad. La pregunta motora: *"¿y si el teléfono que ya tienes en la mano pudiera ver, oír y hablar **por ti**?"*. Pensamos en una abuela en un hospital que no conoce — no puede leer los letreros, no entiende la receta, no encuentra el baño. Sens nació para ese momento.
+- **Momento más difícil del proyecto**: El **echo loop**. El modelo se cortaba a media frase y no entendíamos por qué. Tomó horas de debug entender que era una cadena: speaker reproduce voz del modelo → mic la capta → server VAD lo interpreta como interrupción del usuario → corta al modelo. El fix tuvo 3 capas (echo cancellation + VAD relajado + mic gate client-side) y requirió revertir decisiones anteriores (`fix(audio): disable echo cancellation` se deshizo después). Cerca segundo más difícil: descubrir que la API key de Google estaba en free tier para image gen (cuota = 0) en producción, después de horas pensando que era un bug del código.
+- **Decisión de la que estoy más orgulloso**: **Session resumption + goAway preempt para conversaciones indefinidas**. El Live API tiene un hard limit de 2 minutos que ningún demo público sortea. Implementarlo correctamente — escuchar `sessionResumptionUpdate`, persistir el handle, escuchar `goAway`, parsear duration string, abrir nueva sesión con el handle ANTES de que muera la vieja, suprimir el kickoff en sesiones reanudadas — convirtió a Sens en el único demo de Live API que puede tener una conversación natural sin que el usuario perciba un corte. Es la diferencia entre prototipo y producto.
+- **Decisión que cambiaría hoy**: Empezar con **`app/live/page.tsx` más modular desde el día uno**. Quedó en 1 153 LOC mezclando 8+ concerns. Aunque la velocidad del hackatón justificó el monolito, en retrospectiva 30 minutos invertidos en crear `useLiveSession()`, `useCamera()`, `useMemories()` hooks habrían pagado intereses durante todo el desarrollo. También: NO empezar con el modelo `gemini-live-2.5-flash-preview` (que los docs sugerían pero no existe) — habría ahorrado el ciclo de "WS close 1008 / list-models.mjs / discover el nombre correcto".
+- **Lección técnica más valiosa**: **iOS Safari es la barrera más alta del web móvil moderno, y los fallos son silenciosos**. `ScriptProcessorNode` no tira error, simplemente no llama el callback. `new AudioContext({ sampleRate: 24000 })` no rechaza, hace drift en la timeline después del primer buffer. Custom sample rates parecen funcionar y después se rompen. Lección: probar en hardware iOS real **desde el día uno**, y migrar a AudioWorklet + native sample rates como default, no como fix tardío.
+- **Lección de producto / negocio**: **Los modelos de IA fallan en lugares no obvios y hay que diseñar para esa falla**. El modelo Live es flojo para function calling — alucina respuestas verbales tipo "ya lo guardé" sin invocar realmente la función. La lección: **nunca confiar en que el modelo dispare un tool**. Diseñar siempre dos caminos: el camino "el modelo lo hace bien" (ideal) y el camino "el cliente ejecuta directo cuando el modelo no responde como debería" (fallback). Es por eso que los chips en Sens ejecutan los endpoints directamente además de mandar el prompt al modelo.
+- **Anécdota memorable**: Descubrir en producción que el flag `transparent: true` en `sessionResumption` — que está en los tipos del SDK como opción válida — solo está soportado en Vertex AI, NO en la Gemini Developer API pública. La API simplemente rechazaba el request completo con "transparent parameter is not supported in Gemini API". Una línea entre el SDK y la API real. La docs no lo decía. Tuve que descubrirlo en prod, con el equipo mirando, mientras intentábamos extender la sesión indefinida. Fix: enviar `sessionResumption: {}` sin flags. Lección colateral: cuando una API te da tipos para algo, eso no significa que el endpoint lo acepte.
 
 ## 24. Links y assets
 
-- Repo (público o privado):
-- Deploy / app live:
-- Demo video:
-- Screenshots / capturas:
-- Artículos / posts sobre el proyecto:
-- Press / mentions:
-- Issue tracker:
+- **Repo (público o privado)**: https://github.com/Jhulyammm/sens — **público**, licencia MIT.
+- **Deploy / app live**: https://gemini-api-key-integration.vercel.app (URL del deploy original; el repo se renombró a `sens` pero el dominio Vercel mantiene el nombre viejo, sigue funcional).
+- **Demo video**: PENDIENTE — script completo en `DEMO.md`, shot list de 14 tomas, falta grabar y subir a YouTube como unlisted.
+- **Screenshots / capturas**: PENDIENTES — minimo 3-5 1080×1080 para galería DevPost (hero shot, memoria abierta, caption en vivo, galería de memorias, landing page).
+- **Artículos / posts sobre el proyecto**: — (no hay todavía; considerar escribir uno post-hackatón sobre "Cómo conseguir sesiones indefinidas en Gemini Live API" como contenido técnico para portfolio).
+- **Press / mentions**: PENDIENTES del juicio del hackatón.
+- **Issue tracker**: https://github.com/Jhulyammm/sens/issues
+- **Submission DevPost**: PENDIENTE — texto completo en `DEVPOST.md`, falta enviar antes del deadline.
+- **Documentación interna del equipo** (todos en la raíz del repo):
+  - [`README.md`](README.md) — producto + cómo correr.
+  - [`EQUIPO.md`](EQUIPO.md) — onboarding completo del equipo (15 secciones).
+  - [`DEPLOY.md`](DEPLOY.md) — guía Vercel paso a paso.
+  - [`DEVPOST.md`](DEVPOST.md) — submission ready-to-paste.
+  - [`DEMO.md`](DEMO.md) — guion del video.
+  - [`PITCH.md`](PITCH.md) — preparación del pitch en vivo.
+  - [`PROYECTO.md`](PROYECTO.md) — este documento, análisis técnico para segundo cerebro.
