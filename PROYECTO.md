@@ -632,6 +632,8 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 - **Submission a DevPost**: **enviada y registrada** en la plataforma.
 - **Demo video**: **no se produjo**. Decisión deliberada del equipo — el pitch en vivo + la demo en producción cubrieron el rol del video. `DEMO.md` quedó como guion no ejecutado, sirve como referencia técnica para futuro.
 - **Premio o reconocimiento**: **🏆 GANAMOS la categoría "Best Use of the Gemini API"** en HackDays by Roborregos 2026 (Tec de Monterrey, 9 de mayo de 2026). El premio fue el reconocimiento oficial del hackatón + un detalle simbólico — no hubo premio económico significativo, pero **la categoría era la única dedicada al reto de Gemini API y ganarla valida la ejecución técnica del proyecto**.
+- **Prueba pública del premio**: el badge oficial **"WINNER"** aparece visible en la tarjeta del proyecto en DevPost. Es prueba mejor que una foto del evento — viene del organizador. Sin fotos del evento físico, pero el badge en DevPost es la evidencia primaria.
+- **Tagline oficial del proyecto en DevPost**: *"Apunta. Habla. Entiende. Sens convierte tu celular en los ojos, la voz y la memoria de quien depende de otros para vivir el día."*
 - **Testimonios / impacto cualitativo**: — (sin recopilar).
 - **Otra métrica que importe**:
   - **28 commits en un solo día (9 de mayo de 2026)** — capacidad de ejecución bajo presión en hackatón presencial.
@@ -710,7 +712,7 @@ PARTE 3 — PARA QUE TÚ (JHULYAM) RELLENES
 - **Repo (público)**: https://github.com/Jhulyammm/sens — licencia MIT.
 - **Deploy / app live**: https://gemini-api-key-integration.vercel.app (URL del deploy original; el repo se renombró a `sens` pero el dominio Vercel mantiene el nombre viejo, sigue funcional).
 - **Hackatón — página oficial**: https://hackdays-by-roborregos-2026.devpost.com/ — HackDays by Roborregos 2026 (Tec de Monterrey).
-- **Submission DevPost**: **enviada y registrada**, sin feedback recibido.
+- **Submission DevPost del proyecto Sens**: **enviada, registrada y reconocida como ganadora** (badge "WINNER" visible en la tarjeta del proyecto en DevPost). URL directa del proyecto: PENDIENTE — agregar cuando se tenga.
 - **Demo video**: **no se produjo** (decisión deliberada del equipo). El script de referencia quedó en `DEMO.md` por si en el futuro se decide grabar uno.
 - **Screenshots / capturas**: pendientes de tomar para portfolio personal.
 - **Artículos / posts sobre el proyecto**: — (oportunidad post-hackatón: escribir un post técnico sobre "Cómo conseguir sesiones indefinidas en Gemini Live API con session resumption + goAway preempt" para portfolio personal / Medium / dev.to).
